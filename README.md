@@ -22,6 +22,7 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 - Shows `happy` when a turn ends, then returns to `idle` after 5 seconds
 - Eyes and head follow the pointer when it is near
 - With macOS Reduce Motion on, shows still poses instead of animating
+- Optional start at login, through a per-user LaunchAgent
 - No React, no npm install: the web part is bundled with `bun build`
 
 ## Screenshots
@@ -81,6 +82,20 @@ Add this hook group to each of these events in `~/.claude/settings.json`: `UserP
 
 Open sessions keep their old hooks; new sessions pick this up.
 
+### Start at login
+
+```bash
+./scripts/login-item.sh install     # start HeadsUp now and at every login
+./scripts/login-item.sh status      # plist, agent and process state
+./scripts/login-item.sh uninstall   # stop starting at login
+```
+
+This writes a per-user LaunchAgent to
+`~/Library/LaunchAgents/com.sudarshantechlabs.headsup.plist` pointing at the
+binary in this clone, so re-run `install` if you move the repo. Quitting the
+head from its right-click menu does not relaunch it; the agent only runs it
+at login.
+
 ## How It Works
 
 ```
@@ -132,6 +147,7 @@ HeadsUp/
 │       ├── ticker.ts, color.ts, types.ts
 │       └── tv/                   # robot-heads renderer (geometry, faces, light, sim, render)
 ├── hooks/headsup-state.sh        # Claude Code hook: event → state file
+├── scripts/login-item.sh        # install/remove the start-at-login LaunchAgent
 └── build.sh
 ```
 
@@ -141,7 +157,7 @@ HeadsUp/
 
 Working locally: all nine states render, the hook drives the head from a live Claude Code session, drag and quit work.
 
-Not built yet: one head per session, start at login, a menu-bar menu, code signing.
+Not built yet: one head per session, a menu-bar menu, code signing.
 
 ## Tech Stack
 
