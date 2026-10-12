@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/SUDARSHANCHAUDHARI/HeadsUp/discussions
+    about: Ask a question, show your setup, or suggest something before it becomes an issue.
+  - name: Support HeadsUp
+    url: https://ko-fi.com/sudarshanchaudhari
+    about: HeadsUp is free and MIT licensed. Buy me a coffee if it saves you time.

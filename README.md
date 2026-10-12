@@ -1,6 +1,6 @@
 # HeadsUp
 
-![License](https://img.shields.io/badge/License-MIT-blue) ![Swift](https://img.shields.io/badge/Swift-5.9+-F05138?logo=swift&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-13+-000000?logo=apple&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-bun-3178C6?logo=typescript&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue) ![Swift](https://img.shields.io/badge/Swift-5.9+-F05138?logo=swift&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-13+-000000?logo=apple&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-bun-3178C6?logo=typescript&logoColor=white) [![Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/sudarshanchaudhari)
 
 > A floating robot head on your Mac that shows what Claude Code is doing right now.
 
@@ -168,6 +168,16 @@ transparent always-on-top panel and the state-file polling),
 `web/src/main.ts` (a plain-DOM wrapper replacing the original React one) and
 `hooks/headsup-state.sh` (the Claude Code hook). If you like the robot, star
 the original repo.
+
+## Support
+
+HeadsUp is free and MIT licensed. If it saves you time, you can
+[buy me a coffee](https://ko-fi.com/sudarshanchaudhari).
+
+Questions and ideas belong in
+[Discussions](https://github.com/SUDARSHANCHAUDHARI/HeadsUp/discussions);
+bugs and concrete requests belong in
+[Issues](https://github.com/SUDARSHANCHAUDHARI/HeadsUp/issues).
 
 ## License
 
