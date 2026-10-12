@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in HeadsUp does not work as described.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: state
+    attributes:
+      label: Which state is wrong, if any
+      options:
+        - Not state related
+        - thinking
+        - searching
+        - working
+        - listening
+        - happy
+        - idle
+        - error
+        - sleeping
+    validations:
+      required: true
+  - type: textarea
+    id: state-file
+    attributes:
+      label: Output of `cat ~/.headsup/state`
+      render: shell
+  - type: textarea
+    id: hook-check
+    attributes:
+      label: Output of the hook test
+      description: "Run: printf '{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Grep\"}' | bash hooks/headsup-state.sh; cat ~/.headsup/state"
+      render: shell
