@@ -26,19 +26,22 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 
 ## Screenshots
 
-![HeadsUp cycling through its states on the desktop](docs/demo.gif)
+<div align="center">
 
-The head reacting as a Claude Code session runs: the face, the antenna light
-and the pose change with every hook event.
+<img src="docs/states.png" alt="Six of the nine HeadsUp states" width="760">
 
-![The head tracking the pointer and changing state](docs/motion.gif)
+<em>Six of the nine states — idle, thinking, happy and error among them.</em>
 
-Eyes and head follow the pointer when it is near, and the antenna colour
-tracks the current state.
+<br><br>
 
-![Six of the nine HeadsUp states](docs/states.png)
+<img src="docs/demo.gif" alt="HeadsUp cycling through its states on the desktop" width="340">
+&nbsp;&nbsp;
+<img src="docs/motion.gif" alt="The head tracking the pointer and changing state" width="340">
 
-A few of the nine states — idle, thinking, happy and error among them.
+<em>Left: the face, antenna light and pose change with every hook event.<br>
+Right: eyes and head follow the pointer when it is near.</em>
+
+</div>
 
 ## Installation
 
