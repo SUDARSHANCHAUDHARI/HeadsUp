@@ -22,11 +22,15 @@ final class HeadView: WKWebView {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSMenuDelegate {
     var panel: NSPanel!
     var web: HeadView!
     var shown = ""
     var timer: Timer?
+    var status: NSStatusItem!
+    let stateItem = NSMenuItem(title: "State: —", action: nil, keyEquivalent: "")
+    let visibilityItem = NSMenuItem(title: "Hide Head", action: #selector(toggleHead), keyEquivalent: "")
+    let loginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleLogin), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ note: Notification) {
         panel = NSPanel(contentRect: NSRect(origin: .zero, size: headSize),
@@ -54,6 +58,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
         web.loadFileURL(dir.appendingPathComponent("index.html"), allowingReadAccessTo: dir)
         panel.orderFrontRegardless()
+        buildStatusItem()
+    }
+
+    // The head has no Dock icon, so the menu bar is where everything else lives.
+    func buildStatusItem() {
+        status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // Fall back to text, so a missing symbol never leaves an invisible item.
+        if let icon = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: "HeadsUp") {
+            status.button?.image = icon
+        } else {
+            status.button?.title = "HeadsUp"
+        }
+        status.button?.toolTip = "HeadsUp"
+
+        let menu = NSMenu()
+        menu.delegate = self
+        stateItem.isEnabled = false
+        menu.addItem(stateItem)
+        menu.addItem(.separator())
+        visibilityItem.target = self
+        menu.addItem(visibilityItem)
+        loginItem.target = self
+        menu.addItem(loginItem)
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "Quit HeadsUp", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quit.target = NSApp
+        menu.addItem(quit)
+        status.menu = menu
+    }
+
+    // Both toggles can change behind our back, so read the truth on open.
+    func menuWillOpen(_ menu: NSMenu) {
+        stateItem.title = "State: \(shown.isEmpty ? currentState() : shown)"
+        visibilityItem.title = panel.isVisible ? "Hide Head" : "Show Head"
+        loginItem.state = LoginItem.isInstalled ? .on : .off
+    }
+
+    @objc func toggleHead() {
+        if panel.isVisible { panel.orderOut(nil) } else { panel.orderFrontRegardless() }
+    }
+
+    @objc func toggleLogin() {
+        do {
+            if LoginItem.isInstalled {
+                _ = try LoginItem.uninstall()
+            } else {
+                _ = try LoginItem.install()
+            }
+        } catch {
+            NSLog("HeadsUp: login item failed: \(error.localizedDescription)")
+            let alert = NSAlert()
+            alert.messageText = "Could not change Start at Login"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
+        loginItem.state = LoginItem.isInstalled ? .on : .off
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -96,6 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         return String(array.dropFirst().dropLast())
     }
 }
+
+// `HeadsUp --login-item …` manages the LaunchAgent and exits without a window.
+if let code = runLoginItemCommand(CommandLine.arguments) { exit(code) }
 
 let app = NSApplication.shared
 let delegate = AppDelegate()
