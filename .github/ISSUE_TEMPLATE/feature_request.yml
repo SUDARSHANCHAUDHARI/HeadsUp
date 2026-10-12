@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest something HeadsUp should do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve
+      description: What you are trying to do today and where HeadsUp gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+  - type: checkboxes
+    id: known
+    attributes:
+      label: Already on the roadmap
+      description: These are known gaps, listed in the README.
+      options:
+        - label: I checked that this is not one head per session, start at login, a menu-bar menu, or code signing.
+          required: true
