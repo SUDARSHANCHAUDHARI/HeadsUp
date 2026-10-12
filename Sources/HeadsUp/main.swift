@@ -57,6 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // A reload would otherwise leave the previous poller running, and the
+        // fresh page knows nothing of what the old one was showing.
+        timer?.invalidate()
+        shown = ""
         poll()
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.poll() }
     }
@@ -64,9 +68,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     func poll() {
         let next = currentState()
         guard next != shown else { return }
-        shown = next
-        web.evaluateJavaScript("setState(\(jsString(next)))") { _, error in
-            if let error { NSLog("HeadsUp: setState failed: \(error)") }
+        // Record it only once the page took it, so a failed call is retried.
+        web.evaluateJavaScript("setState(\(jsString(next)))") { [weak self] _, error in
+            if let error {
+                NSLog("HeadsUp: setState failed: \(error)")
+                return
+            }
+            self?.shown = next
         }
     }
 

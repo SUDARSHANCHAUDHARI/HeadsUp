@@ -9,5 +9,6 @@ out=Sources/HeadsUp/Resources/web
 mkdir -p "$out"
 bun build web/src/main.ts --outfile "$out/app.js" --minify
 cp web/index.html "$out/index.html"
+bin=$(swift build -c release --show-bin-path)
 swift build -c release
-echo "Built: $(swift build -c release --show-bin-path)/HeadsUp"
+echo "Built: $bin/HeadsUp"
