@@ -138,6 +138,24 @@ Not built yet: one head per session, start at login, a menu-bar menu, code signi
 
 The transparent background uses WKWebView's undocumented `drawsBackground` key; a future macOS could change it.
 
+## Credits
+
+The robot itself is not my work. The drawing engine comes from
+[robot-heads](https://github.com/fayazara/robot-heads) 0.3.0 by
+[Fayaz Ahmed](https://github.com/fayazara), used under the MIT licence.
+
+These files are copied from it unchanged, and are the larger part of this repo
+(1,946 of its 2,129 source lines):
+
+- `web/src/tv/geometry.ts`, `faces.ts`, `light.ts`, `sim.ts`, `render.ts`
+- `web/src/ticker.ts`, `web/src/color.ts`, `web/src/types.ts`
+
+What HeadsUp adds is the macOS side: `Sources/HeadsUp/main.swift` (the
+transparent always-on-top panel and the state-file polling),
+`web/src/main.ts` (a plain-DOM wrapper replacing the original React one) and
+`hooks/headsup-state.sh` (the Claude Code hook). If you like the robot, star
+the original repo.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Includes code from robot-heads, © 2026 Fayaz Ahmed, MIT.
