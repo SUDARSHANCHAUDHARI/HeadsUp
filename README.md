@@ -17,12 +17,13 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 - Nine robot states, each with its own LED face, motion and antenna light
 - Transparent, borderless window that floats above all apps and appears on every desktop space
 - Drag the head anywhere; the position is remembered between launches
+- Menu-bar icon showing the current state, with Hide Head, Start at Login and Quit
 - Right-click the head to quit; no Dock icon
 - One hook script maps Claude Code events to states, always exits 0 and never blocks Claude
 - Shows `happy` when a turn ends, then returns to `idle` after 5 seconds
 - Eyes and head follow the pointer when it is near
 - With macOS Reduce Motion on, shows still poses instead of animating
-- Optional start at login, through a per-user LaunchAgent
+- Optional start at login, from the menu bar or one command
 - No React, no npm install: the web part is bundled with `bun build`
 
 ## Screenshots
@@ -90,7 +91,7 @@ Open sessions keep their old hooks; new sessions pick this up.
 ./scripts/login-item.sh uninstall   # stop starting at login
 ```
 
-This writes a per-user LaunchAgent to
+The menu bar's **Start at Login** item does the same thing. Either way it writes a per-user LaunchAgent to
 `~/Library/LaunchAgents/com.sudarshantechlabs.headsup.plist` pointing at the
 binary in this clone, so re-run `install` if you move the repo. Quitting the
 head from its right-click menu does not relaunch it; the agent only runs it
@@ -139,7 +140,9 @@ cat ~/.headsup/state                # searching
 ```
 HeadsUp/
 ├── Package.swift                 # Swift package, bundles Resources/web
-├── Sources/HeadsUp/main.swift    # window, web view, state-file polling, drag, quit menu
+├── Sources/HeadsUp/
+│   ├── main.swift                # window, web view, state polling, drag, menu bar
+│   └── LoginItem.swift           # the LaunchAgent, shared by the CLI and the menu
 ├── web/
 │   ├── index.html                # transparent page with one <canvas>
 │   └── src/
@@ -147,7 +150,7 @@ HeadsUp/
 │       ├── ticker.ts, color.ts, types.ts
 │       └── tv/                   # robot-heads renderer (geometry, faces, light, sim, render)
 ├── hooks/headsup-state.sh        # Claude Code hook: event → state file
-├── scripts/login-item.sh        # install/remove the start-at-login LaunchAgent
+├── scripts/login-item.sh        # thin wrapper over HeadsUp --login-item
 └── build.sh
 ```
 
@@ -157,7 +160,7 @@ HeadsUp/
 
 Working locally: all nine states render, the hook drives the head from a live Claude Code session, drag and quit work.
 
-Not built yet: one head per session, a menu-bar menu, code signing.
+Not built yet: one head per session, code signing.
 
 ## Tech Stack
 
