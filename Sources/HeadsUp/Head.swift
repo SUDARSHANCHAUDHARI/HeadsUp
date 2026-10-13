@@ -91,7 +91,6 @@ final class Head: NSObject, WKNavigationDelegate {
         }
     }
 
-    var isVisible: Bool { panel.isVisible }
     func show() { panel.orderFrontRegardless() }
     func hide() { panel.orderOut(nil) }
 
