@@ -20,10 +20,11 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 
 ## Features
 
+- One head per live Claude Code session, fanned out side by side
 - Nine robot states, each with its own LED face, motion and antenna light
 - Transparent, borderless window that floats above all apps and appears on every desktop space
 - Drag the head anywhere; the position is remembered between launches
-- Menu-bar icon showing the current state, with Hide Head, Start at Login, About, Credits and Quit
+- Menu-bar icon showing the current state and how many sessions are running, with Hide Heads, Start at Login, About, Credits and Quit
 - Pick the head's shape, shell, trim, screen colour and animation speed from the menu bar; the choice is remembered
 - Right-click the head to quit; no Dock icon
 - One hook script maps Claude Code events to states, always exits 0 and never blocks Claude
@@ -81,8 +82,8 @@ cd HeadsUp
 # start the app (the head appears bottom-right the first time)
 .build/out/Products/Release/HeadsUp
 
-# show a state by hand
-echo thinking > ~/.headsup/state
+# show a state by hand (one file per session)
+mkdir -p ~/.headsup/sessions && echo thinking > ~/.headsup/sessions/demo.state
 ```
 
 If your Swift toolchain puts the binary elsewhere, `swift build -c release --show-bin-path` prints the folder.
@@ -172,17 +173,26 @@ at login.
 ## How It Works
 
 ```
-Claude Code hook event (stdin JSON)
+Claude Code hook event (stdin JSON, carries session_id)
         │
         ▼
-hooks/headsup-state.sh ──► ~/.headsup/state   (one word, written atomically)
+hooks/headsup-state.sh ──► ~/.headsup/sessions/<id>.state  (one word, written atomically)
                                    │
-                                   ▼  read 4× a second
-                      HeadsUp.app (NSPanel + WKWebView)
+                                   ▼  the directory is scanned 4× a second
+                      HeadsUp (one NSPanel + WKWebView per session)
                                    │
                                    ▼  window.setState(word)
                       robot-heads renderer on a <canvas>
 ```
+
+Every live session gets its own head. A new session's head appears beside the
+others; when a session ends, its head shows `sleeping` for 20 seconds and then
+leaves, taking its file with it. A session that dies without a `SessionEnd` —
+a crash, a kill, a reboot — is given an hour before its head is retired anyway.
+
+The single `~/.headsup/state` file the hook wrote before sessions existed is
+still read, but only when no session file exists, so an old hook keeps working
+and a new one never shows a duplicate head.
 
 | Hook event | State |
 |---|---|
@@ -214,7 +224,9 @@ HeadsUp/
 ├── VERSION                       # the one place the version number lives
 ├── Package.swift                 # Swift package, bundles Resources/web and VERSION
 ├── Sources/HeadsUp/
-│   ├── main.swift                # window, web view, state polling, drag, menu bar
+│   ├── main.swift                # the menu bar, and one head per session
+│   ├── Head.swift                # one panel, one web view, one session's state
+│   ├── Sessions.swift            # which sessions are live, and when a head retires
 │   ├── Look.swift                # the saved appearance, and the JSON the page gets
 │   ├── AboutWindow.swift         # the About and Credits panels
 │   └── LoginItem.swift           # the LaunchAgent, shared by the CLI and the menu
@@ -224,7 +236,7 @@ HeadsUp/
 │       ├── main.ts               # plain-DOM wrapper, exposes window.setState and setLook
 │       ├── ticker.ts, color.ts, types.ts
 │       └── tv/                   # robot-heads renderer (geometry, faces, light, sim, render)
-├── hooks/headsup-state.sh        # Claude Code hook: event → state file
+├── hooks/headsup-state.sh        # Claude Code hook: event → per-session state file
 ├── scripts/
 │   ├── install-hooks.sh          # add or remove the hook in settings.json
 │   ├── package-release.sh        # HeadsUp.app + zip, signed when a cert exists
@@ -278,7 +290,7 @@ source is the only route that does not trip Gatekeeper.
 
 Working locally: all nine states render, the hook drives the head from a live Claude Code session, drag, quit and the menu-bar look options work.
 
-Not built yet: one head per session. `scripts/package-release.sh` builds a real
+`scripts/package-release.sh` builds a real
 `.app` and signs and notarises it when the machine has a Developer ID, but no
 signed build has been published, so releases ship source rather than a binary.
 
