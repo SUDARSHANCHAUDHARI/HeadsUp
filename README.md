@@ -227,6 +227,7 @@ HeadsUp/
 ├── hooks/headsup-state.sh        # Claude Code hook: event → state file
 ├── scripts/
 │   ├── install-hooks.sh          # add or remove the hook in settings.json
+│   ├── package-release.sh        # HeadsUp.app + zip, signed when a cert exists
 │   └── login-item.sh             # thin wrapper over HeadsUp --login-item
 └── build.sh
 ```
@@ -246,6 +247,28 @@ printf '0.2.0\n' > VERSION
 Then commit the bump, tag `v0.2.0`, push the tag, and write the notes with
 `gh release create`.
 
+### Packaging a build
+
+```bash
+./scripts/package-release.sh      # dist/HeadsUp.app and dist/HeadsUp-<version>-macOS.zip
+```
+
+It wraps the executable in a real `.app` with an Info.plist, so the app can be
+double-clicked and dragged to Applications instead of launched from a path.
+
+Signing and notarisation are automatic when the machine has them: a
+`Developer ID Application` certificate in the keychain signs the bundle, and a
+`notarytool` profile named `HeadsUp` notarises and staples it. Store one with
+
+```bash
+xcrun notarytool store-credentials HeadsUp \
+    --apple-id you@example.com --team-id TEAMID --password APP-SPECIFIC-PASSWORD
+```
+
+Without a certificate the script still produces a working `.app` and says so.
+That build runs on the machine that built it, but Gatekeeper refuses it
+anywhere else, which is why releases ship source for now.
+
 Releases are listed at
 [github.com/SUDARSHANCHAUDHARI/HeadsUp/releases](https://github.com/SUDARSHANCHAUDHARI/HeadsUp/releases).
 They carry no binary: the app is unsigned and un-notarised, so building from
@@ -255,8 +278,9 @@ source is the only route that does not trip Gatekeeper.
 
 Working locally: all nine states render, the hook drives the head from a live Claude Code session, drag, quit and the menu-bar look options work.
 
-Not built yet: one head per session, code signing and notarisation, so releases
-ship source rather than a binary.
+Not built yet: one head per session. `scripts/package-release.sh` builds a real
+`.app` and signs and notarises it when the machine has a Developer ID, but no
+signed build has been published, so releases ship source rather than a binary.
 
 ## Tech Stack
 
