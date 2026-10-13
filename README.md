@@ -1,6 +1,6 @@
 # HeadsUp
 
-![License](https://img.shields.io/badge/License-MIT-blue) ![Swift](https://img.shields.io/badge/Swift-5.9+-F05138?logo=swift&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-13+-000000?logo=apple&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-bun-3178C6?logo=typescript&logoColor=white) [![Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/sudarshanchaudhari)
+[![Release](https://img.shields.io/github/v/release/SUDARSHANCHAUDHARI/HeadsUp?color=4c1)](https://github.com/SUDARSHANCHAUDHARI/HeadsUp/releases/latest) ![License](https://img.shields.io/badge/License-MIT-blue) ![Swift](https://img.shields.io/badge/Swift-5.9+-F05138?logo=swift&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-13+-000000?logo=apple&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-bun-3178C6?logo=typescript&logoColor=white) [![Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/sudarshanchaudhari)
 
 > A floating robot head on your Mac that shows what Claude Code is doing right now.
 
@@ -190,7 +190,8 @@ cat ~/.headsup/state                # searching
 
 ```
 HeadsUp/
-├── Package.swift                 # Swift package, bundles Resources/web
+├── VERSION                       # the one place the version number lives
+├── Package.swift                 # Swift package, bundles Resources/web and VERSION
 ├── Sources/HeadsUp/
 │   ├── main.swift                # window, web view, state polling, drag, menu bar
 │   ├── Look.swift                # the saved appearance, and the JSON the page gets
@@ -209,11 +210,30 @@ HeadsUp/
 
 `web/src/tv/*`, `ticker.ts`, `color.ts` and `types.ts` are copied unchanged from robot-heads 0.3.0.
 
+## Releasing
+
+`VERSION` is the only place the number lives. `build.sh` copies it into the app
+bundle and the About panel reads it there, so a release is one file and one tag:
+
+```bash
+printf '0.2.0\n' > VERSION
+./build.sh
+```
+
+Then commit the bump, tag `v0.2.0`, push the tag, and write the notes with
+`gh release create`.
+
+Releases are listed at
+[github.com/SUDARSHANCHAUDHARI/HeadsUp/releases](https://github.com/SUDARSHANCHAUDHARI/HeadsUp/releases).
+They carry no binary: the app is unsigned and un-notarised, so building from
+source is the only route that does not trip Gatekeeper.
+
 ## Roadmap / Status
 
 Working locally: all nine states render, the hook drives the head from a live Claude Code session, drag, quit and the menu-bar look options work.
 
-Not built yet: one head per session, code signing.
+Not built yet: one head per session, code signing and notarisation, so releases
+ship source rather than a binary.
 
 ## Tech Stack
 
