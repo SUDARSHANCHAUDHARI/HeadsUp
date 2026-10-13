@@ -18,6 +18,7 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 - Transparent, borderless window that floats above all apps and appears on every desktop space
 - Drag the head anywhere; the position is remembered between launches
 - Menu-bar icon showing the current state, with Hide Head, Start at Login and Quit
+- Pick the head's shape, shell, trim, screen colour and animation speed from the menu bar; the choice is remembered
 - Right-click the head to quit; no Dock icon
 - One hook script maps Claude Code events to states, always exits 0 and never blocks Claude
 - Shows `happy` when a turn ends, then returns to `idle` after 5 seconds
@@ -42,6 +43,12 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 
 <em>Left: the face, antenna light and pose change with every hook event.<br>
 Right: eyes and head follow the pointer when it is near.</em>
+
+<br><br>
+
+<img src="docs/looks.gif" alt="The head changing shape, shell colour and screen colour from the menu bar" width="300">
+
+<em>Four shapes, ten shells, five trims and five screen colours, picked from the menu bar.</em>
 
 </div>
 
@@ -82,6 +89,38 @@ Add this hook group to each of these events in `~/.claude/settings.json`: `UserP
 ```
 
 Open sessions keep their old hooks; new sessions pick this up.
+
+### Appearance
+
+<div align="center">
+
+<img src="docs/menubar.png" alt="The HeadsUp icon in the macOS menu bar" width="50">
+
+<em>HeadsUp sits in the menu bar.</em>
+
+<br><br>
+
+<img src="docs/menu.png" alt="The HeadsUp menu with the Shape submenu open" width="308">
+
+</div>
+
+The menu-bar icon holds every look option. Each takes effect at once and is
+kept in `UserDefaults`, so it survives a relaunch.
+
+| Menu | Choices |
+|------|---------|
+| Shape | Rectangle, Square, Circle, Hexagon |
+| Shell | Cobalt, Tomato, Tangerine, Mustard, Mint, Teal, Grape, Bubblegum, Graphite, Porcelain |
+| Trim | Steel, Silver, Brass, Copper, Black |
+| Screen | White, Ice, Matrix, Amber, Neon |
+| Speed | 0.5×, 1×, 1.5×, 2× |
+| Antenna | on or off |
+| Pause Animation | freezes the head on its current frame |
+
+The swatches are robot-heads' own, so a preset here matches the same preset in
+[its playground](https://robot-heads.fayaz.workers.dev/). A shape or antenna
+change moves the head's bounds, and the window follows, keeping its top-left
+corner where it was.
 
 ### Start at login
 
@@ -142,11 +181,12 @@ HeadsUp/
 ├── Package.swift                 # Swift package, bundles Resources/web
 ├── Sources/HeadsUp/
 │   ├── main.swift                # window, web view, state polling, drag, menu bar
+│   ├── Look.swift                # the saved appearance, and the JSON the page gets
 │   └── LoginItem.swift           # the LaunchAgent, shared by the CLI and the menu
 ├── web/
 │   ├── index.html                # transparent page with one <canvas>
 │   └── src/
-│       ├── main.ts               # plain-DOM wrapper, exposes window.setState
+│       ├── main.ts               # plain-DOM wrapper, exposes window.setState and setLook
 │       ├── ticker.ts, color.ts, types.ts
 │       └── tv/                   # robot-heads renderer (geometry, faces, light, sim, render)
 ├── hooks/headsup-state.sh        # Claude Code hook: event → state file
@@ -158,7 +198,7 @@ HeadsUp/
 
 ## Roadmap / Status
 
-Working locally: all nine states render, the hook drives the head from a live Claude Code session, drag and quit work.
+Working locally: all nine states render, the hook drives the head from a live Claude Code session, drag, quit and the menu-bar look options work.
 
 Not built yet: one head per session, code signing.
 
@@ -182,9 +222,13 @@ These files are copied from it unchanged, and are the larger part of this repo
 - `web/src/tv/geometry.ts`, `faces.ts`, `light.ts`, `sim.ts`, `render.ts`
 - `web/src/ticker.ts`, `web/src/color.ts`, `web/src/types.ts`
 
+The named swatches in the Shell, Trim and Screen menus are its playground's
+too (`site/src/App.tsx`), so the presets match.
+
 What HeadsUp adds is the macOS side: `Sources/HeadsUp/main.swift` (the
-transparent always-on-top panel and the state-file polling),
-`web/src/main.ts` (a plain-DOM wrapper replacing the original React one) and
+transparent always-on-top panel, the state-file polling and the menu bar),
+`Sources/HeadsUp/Look.swift` (the saved appearance), `web/src/main.ts` (a
+plain-DOM wrapper replacing the original React one) and
 `hooks/headsup-state.sh` (the Claude Code hook). If you like the robot, star
 the original repo.
 
