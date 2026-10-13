@@ -7,7 +7,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "HeadsUp",
-            resources: [.copy("Resources/web")]
+            resources: [.copy("Resources/web"), .copy("Resources/VERSION")]
         )
     ]
 )
