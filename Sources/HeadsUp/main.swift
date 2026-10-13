@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             live.insert(reading.id)
             if let head = heads[reading.id] {
+                head.name = reading.name
                 head.setState(reading.state)
             } else {
                 open(reading)
@@ -83,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let head = Head(session: reading.id, look: look, origin: origin, autosave: first ? "HeadsUp" : nil)
         if hidden { head.hide() }
+        head.name = reading.name
         head.setState(reading.state)
         heads[reading.id] = head
         order.append(reading.id)
@@ -161,7 +163,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch order.count {
         case 0: sessionsItem.title = "No sessions"
         case 1: sessionsItem.title = "1 session"
-        default: sessionsItem.title = "\(order.count) sessions: \(states.joined(separator: ", "))"
+        default:
+            let described = order.compactMap { id -> String? in
+                guard let head = heads[id] else { return nil }
+                return head.name.isEmpty ? head.state : "\(head.name) \(head.state)"
+            }
+            sessionsItem.title = "\(order.count) sessions: \(described.joined(separator: ", "))"
         }
         visibilityItem.title = hidden ? "Show Heads" : "Hide Heads"
         loginItem.state = LoginItem.isInstalled ? .on : .off
