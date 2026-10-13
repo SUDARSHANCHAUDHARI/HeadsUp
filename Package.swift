@@ -8,6 +8,10 @@ let package = Package(
         .executableTarget(
             name: "HeadsUp",
             resources: [.copy("Resources/web"), .copy("Resources/VERSION")]
+        ),
+        .testTarget(
+            name: "HeadsUpTests",
+            dependencies: ["HeadsUp"]
         )
     ]
 )

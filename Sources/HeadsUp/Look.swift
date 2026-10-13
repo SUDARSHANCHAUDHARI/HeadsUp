@@ -26,9 +26,12 @@ struct Look: Equatable {
 
     /// Anything missing or unknown keeps its default, so a stale or
     /// hand-edited preference can never leave the head unreadable.
-    static func load() -> Look {
+    ///
+    /// `defaults` is a seam for the tests, so they never touch the real
+    /// preferences; the app always uses the standard store.
+    static func load(from defaults: UserDefaults = .standard) -> Look {
         var look = Look()
-        guard let saved = UserDefaults.standard.dictionary(forKey: key) else { return look }
+        guard let saved = defaults.dictionary(forKey: key) else { return look }
         if let value = saved["shape"] as? String, shapes.contains(value) { look.shape = value }
         if let value = saved["shell"] as? String, shells.contains(value) { look.shell = value }
         if let value = saved["trim"] as? String, trims.contains(value) { look.trim = value }
@@ -39,8 +42,8 @@ struct Look: Equatable {
         return look
     }
 
-    func save() {
-        UserDefaults.standard.set([
+    func save(to defaults: UserDefaults = .standard) {
+        defaults.set([
             "shape": shape, "shell": shell, "trim": trim, "screen": screen,
             "speed": speed, "paused": paused, "antenna": antenna,
         ], forKey: Self.key)
