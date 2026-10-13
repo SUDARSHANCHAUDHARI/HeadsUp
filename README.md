@@ -21,10 +21,11 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 ## Features
 
 - One head per live Claude Code session, fanned out side by side, each labelled with the folder it is working in
+- Draws at 20fps, which costs a third of what the display's 60fps did with several heads on screen
 - Nine robot states, each with its own LED face, motion and antenna light
 - Transparent, borderless window that floats above all apps and appears on every desktop space
 - Drag the head anywhere; the position is remembered between launches
-- Menu-bar icon showing the current state and how many sessions are running, with Hide Heads, Start at Login, About, Credits and Quit
+- Menu-bar icon showing how many sessions are running, with each one's project and state behind it, plus Hide Heads, Start at Login, About, Credits and Quit
 - Pick the head's shape, shell, trim, screen colour and animation speed from the menu bar; the choice is remembered
 - Right-click the head to quit; no Dock icon
 - One hook script maps Claude Code events to states, always exits 0 and never blocks Claude
@@ -298,14 +299,19 @@ Releases are listed at
 They carry no binary: the app is unsigned and un-notarised, so building from
 source is the only route that does not trip Gatekeeper.
 
-## Roadmap / Status
+## Status
 
-Working: all nine states render, the hook drives one head per live Claude Code
-session, and drag, quit and the menu-bar look options all work.
+Complete, at v0.5.0. It does what it set out to do: nine states render, the
+hook drives one head per live Claude Code session, each head is labelled with
+its project, and drag, quit and the menu-bar look options all work. No feature
+work is planned.
 
-Not done: signing. `scripts/package-release.sh` builds a real `.app` and signs
-and notarises it when the machine has a Developer ID, but no signed build has
-been published, so releases ship source rather than a binary.
+Releases ship source rather than a binary, because the app is not signed or
+notarised — that needs a paid Apple Developer membership, not code.
+`scripts/package-release.sh` already signs and notarises on a machine that has
+a Developer ID, so a signed build is one command away whenever that changes.
+
+Bug reports and pull requests are welcome; it is finished, not abandoned.
 
 ## Tech Stack
 
