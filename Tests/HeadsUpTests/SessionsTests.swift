@@ -23,9 +23,9 @@ final class SessionsTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    private func write(_ state: String, session: String, ago: TimeInterval = 0) throws {
+    private func write(_ state: String, session: String, name: String = "", ago: TimeInterval = 0) throws {
         let url = session.isEmpty ? legacy! : directory.appendingPathComponent("\(session).state")
-        try "\(state)\n".write(to: url, atomically: true, encoding: .utf8)
+        try "\(state)\n\(name)\n".write(to: url, atomically: true, encoding: .utf8)
         if ago > 0 {
             try FileManager.default.setAttributes(
                 [.modificationDate: Date().addingTimeInterval(-ago)], ofItemAtPath: url.path
@@ -82,6 +82,21 @@ final class SessionsTests: XCTestCase {
 
         try write("happy", session: "a", ago: 30)
         XCTAssertEqual(read().first?.state, "idle")
+    }
+
+    func testTheSecondLineIsTheProjectName() throws {
+        try write("working", session: "a", name: "MyApp")
+        XCTAssertEqual(read().first?.name, "MyApp")
+    }
+
+    /// The hook wrote one line before labels existed; that file still works,
+    /// it just has no name to show.
+    func testAOneLineFileHasNoName() throws {
+        try "thinking\n".write(to: directory.appendingPathComponent("a.state"), atomically: true, encoding: .utf8)
+
+        let found = read()
+        XCTAssertEqual(found.first?.state, "thinking")
+        XCTAssertEqual(found.first?.name, "")
     }
 
     func testAnEmptyFileIsNotASession() throws {

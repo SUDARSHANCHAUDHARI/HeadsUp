@@ -7,9 +7,13 @@ import WebKit
 // The head owns nothing about where state comes from; the delegate polls the
 // files and hands each head its word.
 final class Head: NSObject, WKNavigationDelegate {
+    /// Room under the head for the session's name.
+    static let labelHeight: CGFloat = 18
+
     let session: String
     let panel: NSPanel
     let web: HeadView
+    let label = NSTextField(labelWithString: "")
     private var shown = ""
     private var loaded = false
     private var look: Look
@@ -19,9 +23,11 @@ final class Head: NSObject, WKNavigationDelegate {
     init(session: String, look: Look, origin: NSPoint, autosave: String?) {
         self.session = session
         self.look = look
-        panel = NSPanel(contentRect: NSRect(origin: origin, size: headSize),
+        let size = NSSize(width: headSize.width, height: headSize.height + Head.labelHeight)
+        panel = NSPanel(contentRect: NSRect(origin: origin, size: size),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        web = HeadView(frame: NSRect(origin: .zero, size: headSize), configuration: WKWebViewConfiguration())
+        web = HeadView(frame: NSRect(x: 0, y: Head.labelHeight, width: headSize.width, height: headSize.height),
+                       configuration: WKWebViewConfiguration())
         super.init()
 
         panel.isOpaque = false
@@ -40,7 +46,26 @@ final class Head: NSObject, WKNavigationDelegate {
         // Undocumented KVC key; the only way to give WKWebView a transparent background on macOS.
         web.setValue(false, forKey: "drawsBackground")
         web.navigationDelegate = self
-        panel.contentView = web
+
+        // The name sits on the desktop with nothing behind it, so it carries its
+        // own shadow rather than relying on the wallpaper being dark.
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .white
+        label.alignment = .center
+        label.lineBreakMode = .byTruncatingTail
+        label.shadow = {
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.85)
+            shadow.shadowBlurRadius = 3
+            shadow.shadowOffset = NSSize(width: 0, height: -1)
+            return shadow
+        }()
+        label.frame = NSRect(x: 0, y: 0, width: panel.frame.width, height: Head.labelHeight)
+
+        let content = NSView(frame: NSRect(origin: .zero, size: panel.frame.size))
+        content.addSubview(web)
+        content.addSubview(label)
+        panel.contentView = content
 
         guard let dir = Bundle.module.url(forResource: "web", withExtension: nil) else {
             fatalError("web resources missing from bundle; run ./build.sh")
@@ -53,6 +78,17 @@ final class Head: NSObject, WKNavigationDelegate {
         panel.orderOut(nil)
         panel.contentView = nil
         web.navigationDelegate = nil
+    }
+
+    /// The folder this session is working in. Empty hides the label and the
+    /// room it takes, so a hook that does not send one costs nothing.
+    var name: String = "" {
+        didSet {
+            guard name != oldValue else { return }
+            label.stringValue = name
+            label.toolTip = name.isEmpty ? nil : name
+            layout()
+        }
     }
 
     var isVisible: Bool { panel.isVisible }
@@ -96,13 +132,27 @@ final class Head: NSObject, WKNavigationDelegate {
         }
     }
 
+    /// The size the page last reported for its canvas.
+    private var headBounds = headSize
+
     private func resize(to size: NSSize) {
-        guard panel.frame.size != size else { return }
+        headBounds = size
+        layout()
+    }
+
+    /// The window is the head plus, when there is one, a line of text under it.
+    private func layout() {
+        let room = name.isEmpty ? 0 : Head.labelHeight
+        let size = NSSize(width: headBounds.width, height: headBounds.height + room)
         var next = panel.frame
+        // Keep the top edge still, so a head does not jump when its name arrives.
         next.origin.y = next.maxY - size.height
         next.size = size
-        panel.setFrame(next, display: true)
-        web.frame = NSRect(origin: .zero, size: size)
+        if panel.frame != next { panel.setFrame(next, display: true) }
+        panel.contentView?.frame = NSRect(origin: .zero, size: size)
+        web.frame = NSRect(x: 0, y: room, width: size.width, height: headBounds.height)
+        label.frame = NSRect(x: 0, y: 0, width: size.width, height: Head.labelHeight)
+        label.isHidden = name.isEmpty
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
