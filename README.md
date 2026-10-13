@@ -17,7 +17,7 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 - Nine robot states, each with its own LED face, motion and antenna light
 - Transparent, borderless window that floats above all apps and appears on every desktop space
 - Drag the head anywhere; the position is remembered between launches
-- Menu-bar icon showing the current state, with Hide Head, Start at Login and Quit
+- Menu-bar icon showing the current state, with Hide Head, Start at Login, About, Credits and Quit
 - Pick the head's shape, shell, trim, screen colour and animation speed from the menu bar; the choice is remembered
 - Right-click the head to quit; no Dock icon
 - One hook script maps Claude Code events to states, always exits 0 and never blocks Claude
@@ -122,6 +122,18 @@ The swatches are robot-heads' own, so a preset here matches the same preset in
 change moves the head's bounds, and the window follows, keeping its top-left
 corner where it was.
 
+### About and Credits
+
+<div align="center">
+
+<img src="docs/about.png" alt="The About HeadsUp panel" width="320">
+&nbsp;&nbsp;
+<img src="docs/credits.png" alt="The Credits panel, crediting robot-heads" width="354">
+
+<em>Left: version, author and contact. Right: what the robot is and whose it is.</em>
+
+</div>
+
 ### Start at login
 
 ```bash
@@ -182,6 +194,7 @@ HeadsUp/
 ├── Sources/HeadsUp/
 │   ├── main.swift                # window, web view, state polling, drag, menu bar
 │   ├── Look.swift                # the saved appearance, and the JSON the page gets
+│   ├── AboutWindow.swift         # the About and Credits panels
 │   └── LoginItem.swift           # the LaunchAgent, shared by the CLI and the menu
 ├── web/
 │   ├── index.html                # transparent page with one <canvas>
