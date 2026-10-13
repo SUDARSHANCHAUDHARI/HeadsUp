@@ -12,6 +12,8 @@ mkdir -p "$out"
 # variable names for this bundle.
 bun build web/src/main.ts --outfile "$out/app.js"
 cp web/index.html "$out/index.html"
+# VERSION is the one place the number lives; About reads this copy.
+cp VERSION Sources/HeadsUp/Resources/VERSION
 bin=$(swift build -c release --show-bin-path)
 swift build -c release
 echo "Built: $bin/HeadsUp"

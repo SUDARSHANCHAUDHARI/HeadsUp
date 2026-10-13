@@ -4,10 +4,21 @@ import AppKit
 // icon, a few centred lines and link buttons, in a floating panel made once and
 // reused.
 //
-// The package builds a bare executable with no Info.plist, so the version is a
-// constant here rather than CFBundleShortVersionString, and the icon is the
-// same SF Symbol the menu bar uses rather than the app icon.
-let headsUpVersion = "0.1.0"
+// The package builds a bare executable with no Info.plist, so the version comes
+// from the VERSION file at the repo root, copied into the bundle by build.sh,
+// rather than CFBundleShortVersionString; the icon is the same SF Symbol the
+// menu bar uses rather than the app icon.
+//
+// VERSION is the only place the number lives, so a release bumps one file.
+let headsUpVersion: String = {
+    guard let url = Bundle.module.url(forResource: "VERSION", withExtension: nil),
+          let text = try? String(contentsOf: url, encoding: .utf8)
+    else {
+        NSLog("HeadsUp: VERSION missing from the bundle; run ./build.sh")
+        return "unknown"
+    }
+    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+}()
 
 final class AboutWindow {
     private var aboutPanel: NSPanel?
