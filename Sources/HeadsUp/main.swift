@@ -32,12 +32,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// One head per session id, in the order they appeared.
     var heads: [String: Head] = [:]
     var order: [String] = []
+    /// Which fan-out slot each head sits in, so a head opening after one in the
+    /// middle has closed takes the gap rather than landing on its neighbour.
+    var slots: [String: Int] = [:]
     var hidden = false
     var timer: Timer?
     var status: NSStatusItem!
-    let stateItem = NSMenuItem(title: "State: —", action: nil, keyEquivalent: "")
     let visibilityItem = NSMenuItem(title: "Hide Head", action: #selector(toggleHead), keyEquivalent: "")
-    let sessionsItem = NSMenuItem(title: "Sessions: —", action: nil, keyEquivalent: "")
+    let sessionsItem = NSMenuItem(title: "No sessions", action: nil, keyEquivalent: "")
+    /// The submenu behind the session count, one row per session.
+    let sessionsMenu = NSMenu()
     let loginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleLogin), keyEquivalent: "")
     let pauseItem = NSMenuItem(title: "Pause Animation", action: #selector(togglePause), keyEquivalent: "")
     let antennaItem = NSMenuItem(title: "Antenna", action: #selector(toggleAntenna), keyEquivalent: "")
@@ -76,9 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func open(_ reading: Sessions.Reading) {
         // The first head keeps the remembered position; the rest fan out to its
-        // left, so a second session never lands exactly on top of the first.
+        // left, into the lowest free slot.
         let first = order.isEmpty
-        let step = CGFloat(order.count) * (headSize.width + 16)
+        var slot = 0
+        while slots.values.contains(slot) { slot += 1 }
+        slots[reading.id] = slot
+        let step = CGFloat(slot) * (headSize.width + 16)
         let screen = NSScreen.main?.visibleFrame ?? .zero
         let origin = NSPoint(x: screen.maxX - headSize.width - 24 - step, y: screen.minY + 24)
 
@@ -93,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func close(_ id: String) {
         heads.removeValue(forKey: id)?.close()
         order.removeAll { $0 == id }
+        slots.removeValue(forKey: id)
     }
 
     // The head has no Dock icon, so the menu bar is where everything else lives.
@@ -108,9 +116,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.delegate = self
-        stateItem.isEnabled = false
-        menu.addItem(stateItem)
-        sessionsItem.isEnabled = false
         menu.addItem(sessionsItem)
         menu.addItem(.separator())
         visibilityItem.target = self
@@ -158,18 +163,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Both toggles can change behind our back, so read the truth on open.
     func menuWillOpen(_ menu: NSMenu) {
-        let states = order.compactMap { heads[$0]?.state }.filter { !$0.isEmpty }
-        stateItem.title = "State: \(states.first ?? "—")"
-        switch order.count {
-        case 0: sessionsItem.title = "No sessions"
-        case 1: sessionsItem.title = "1 session"
-        default:
-            let described = order.compactMap { id -> String? in
-                guard let head = heads[id] else { return nil }
-                return head.name.isEmpty ? head.state : "\(head.name) \(head.state)"
-            }
-            sessionsItem.title = "\(order.count) sessions: \(described.joined(separator: ", "))"
+        // The count on the menu, the detail one row per session behind it: all of
+        // them on one line made the menu wider than the screen deserves, and all
+        // of them inline made it taller the more sessions were running.
+        sessionsItem.title = order.isEmpty ? "No sessions"
+            : (order.count == 1 ? "1 session" : "\(order.count) sessions")
+        sessionsMenu.removeAllItems()
+        for id in order {
+            guard let head = heads[id] else { continue }
+            let row = NSMenuItem(title: head.name.isEmpty ? head.state : "\(head.name) — \(head.state)",
+                                 action: nil, keyEquivalent: "")
+            row.isEnabled = false
+            sessionsMenu.addItem(row)
         }
+        sessionsItem.submenu = order.isEmpty ? nil : sessionsMenu
         visibilityItem.title = hidden ? "Show Heads" : "Hide Heads"
         loginItem.state = LoginItem.isInstalled ? .on : .off
         antennaItem.state = look.antenna ? .on : .off

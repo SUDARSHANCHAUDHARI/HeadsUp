@@ -12,6 +12,12 @@ import { subscribe, pointer } from './ticker';
 const STATES: RobotHeadState[] = ['idle', 'thinking', 'searching', 'listening', 'speaking', 'working', 'happy', 'error', 'sleeping'];
 const SHAPES: RobotHeadShape[] = ['rectangle', 'square', 'circle', 'hexagon'];
 const SIZE = 120;
+/* Draw at 20fps rather than the display's 60. Each head is its own WKWebView,
+   so heads cost real CPU: measured across the app and its WebKit processes with
+   five sessions on screen, uncapped was 211%, 30fps 128%, 20fps 83% and 12fps
+   72% — below 20 the saving is mostly gone, and a bobbing head on the edge of
+   the desktop does not need more. */
+const FRAME = 1 / 20;
 
 /* The named swatches from robot-heads' own playground (site/src/App.tsx),
    so a preset here looks like the same preset there. Swift sends the name;
@@ -180,14 +186,21 @@ resize();
 frame = balanced(frame);
 resize();
 if (reducedMotion) paint(false);
-else
+else {
+  // Time dropped by the skipped frames, so motion keeps its real speed.
+  let owed = 0;
   subscribe((dt) => {
     // Paused freezes the head on the frame it is already showing.
     if (look.paused) return;
+    owed += dt;
+    if (owed < FRAME) return;
+    const step = owed;
+    owed = 0;
     if (Number.isFinite(pointer.x)) {
       const box = canvas.getBoundingClientRect();
       sim.pointer = { x: pointer.x - (box.left + box.width / 2), y: pointer.y - (box.top + frame.cy) };
     } else sim.pointer = null;
-    sim.update(dt * look.speed);
+    sim.update(step * look.speed);
     paint(true);
   });
+}
