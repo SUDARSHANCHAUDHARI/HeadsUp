@@ -39,9 +39,10 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 
 <div align="center">
 
-<img src="docs/sessions.png" alt="Three HeadsUp robots side by side, each labelled with the project its session is working in" width="535">
+<img src="docs/sessions.png" alt="Five HeadsUp robots side by side, each in a different state" width="760">
 
-<em>One head per live Claude Code session, each labelled with the folder it is working in.</em>
+<em>One head per live Claude Code session. Each carries the name of the folder it
+is working in underneath, left out here.</em>
 
 <br><br>
 
