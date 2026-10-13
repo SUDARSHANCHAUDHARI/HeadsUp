@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let antennaItem = NSMenuItem(title: "Antenna", action: #selector(toggleAntenna), keyEquivalent: "")
     var look = Look.load()
     var lookMenus: [LookField: NSMenu] = [:]
+    let about = AboutWindow()
 
     func applicationDidFinishLaunching(_ note: Notification) {
         panel = NSPanel(contentRect: NSRect(origin: .zero, size: headSize),
@@ -103,6 +104,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         pauseItem.target = self
         menu.addItem(pauseItem)
         menu.addItem(.separator())
+        let aboutItem = NSMenuItem(title: "About HeadsUp…", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+        let creditsItem = NSMenuItem(title: "Credits…", action: #selector(showCredits), keyEquivalent: "")
+        creditsItem.target = self
+        menu.addItem(creditsItem)
         let quit = NSMenuItem(title: "Quit HeadsUp", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
@@ -171,6 +178,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         look.paused.toggle()
         look.save()
         pushLook()
+    }
+
+    @objc func showAbout() {
+        about.showAbout()
+    }
+
+    @objc func showCredits() {
+        about.showCredits()
     }
 
     @objc func toggleAntenna() {
