@@ -4,7 +4,7 @@
 import type { RobotHeadShape, RobotHeadState } from './types';
 import { getShape } from './tv/geometry';
 import { RobotSim, restPose } from './tv/sim';
-import { RobotRenderer, frameFor, type Palette } from './tv/render';
+import { RobotRenderer, frameFor, type Frame, type Palette } from './tv/render';
 import { linear } from './tv/light';
 import { parseColor } from './color';
 import { subscribe, pointer } from './ticker';
@@ -69,6 +69,7 @@ function paletteFor(l: Look): Palette {
 }
 
 const canvas = document.getElementById('head') as HTMLCanvasElement;
+if (!canvas) throw new Error('HeadsUp: no #head canvas on the page');
 const ctx = canvas.getContext('2d')!;
 const renderer = new RobotRenderer();
 let state: RobotHeadState = 'idle';
@@ -84,6 +85,49 @@ let palette = paletteFor(look);
 
 function paint(animated: boolean) {
   renderer.draw(ctx, frame, dpr, animated ? sim.pose : restPose(state), animated ? sim : null, state, shape, palette, { floorShadow: false, antenna: look.antenna });
+}
+
+/**
+ * `frameFor` reserves room above the head for the antenna's glow and for a
+ * hop, and below it for a floor shadow we never draw, so the head rests well
+ * below the middle of its canvas. In a window with no background that reads as
+ * the head hanging off-centre.
+ *
+ * Rather than guess the reserve back out of the renderer's constants, draw the
+ * resting head once and measure it: the top padding loses whatever the head
+ * never uses, down to the room the bottom already has. The pixels are read
+ * once per look change, never per frame.
+ */
+function balanced(base: Frame): Frame {
+  renderer.draw(ctx, base, dpr, restPose(state), null, state, shape, palette, { floorShadow: false, antenna: look.antenna });
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let top = -1;
+  let bottom = -1;
+  for (let y = 0; y < canvas.height && top < 0; y++)
+    for (let x = 0; x < canvas.width; x++)
+      if (pixels[(y * canvas.width + x) * 4 + 3] > 0) {
+        top = y;
+        break;
+      }
+  for (let y = canvas.height - 1; y >= 0 && bottom < 0; y--)
+    for (let x = 0; x < canvas.width; x++)
+      if (pixels[(y * canvas.width + x) * 4 + 3] > 0) {
+        bottom = canvas.height - 1 - y;
+        break;
+      }
+  // A blank canvas means nothing was drawn; leave the frame alone.
+  if (top < 0 || bottom < 0) return base;
+  const gap = Math.floor((top - bottom) / dpr);
+  if (gap <= 0) return base;
+  // Without the antenna there is barely any top padding to give up, so
+  // whatever the top cannot lose the bottom gains instead.
+  const trim = Math.min(gap, base.padTop - 1);
+  return {
+    ...base,
+    padTop: base.padTop - trim,
+    padBottom: base.padBottom + (gap - trim),
+    cy: base.cy - trim,
+  };
 }
 
 /** Size the canvas to the current frame; returns its CSS size. */
@@ -121,8 +165,10 @@ function resize(): [number, number] {
   if (typeof n.antenna === 'boolean') look.antenna = n.antenna;
 
   shape = getShape(look.shape);
-  frame = frameFor(shape, look.antenna, SIZE);
   palette = paletteFor(look);
+  frame = frameFor(shape, look.antenna, SIZE);
+  resize();
+  frame = balanced(frame);
   const size = resize();
   paint(!reducedMotion && !look.paused);
   return size;
@@ -130,6 +176,8 @@ function resize(): [number, number] {
 
 canvas.addEventListener('click', () => sim.poke());
 
+resize();
+frame = balanced(frame);
 resize();
 if (reducedMotion) paint(false);
 else
