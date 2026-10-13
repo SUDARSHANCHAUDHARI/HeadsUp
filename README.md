@@ -27,6 +27,7 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 - Pick the head's shape, shell, trim, screen colour and animation speed from the menu bar; the choice is remembered
 - Right-click the head to quit; no Dock icon
 - One hook script maps Claude Code events to states, always exits 0 and never blocks Claude
+- One command installs that hook into `~/.claude/settings.json`, and takes it out again
 - Shows `happy` when a turn ends, then returns to `idle` after 5 seconds
 - Eyes and head follow the pointer when it is near
 - With macOS Reduce Motion on, shows still poses instead of animating
@@ -88,7 +89,21 @@ If your Swift toolchain puts the binary elsewhere, `swift build -c release --sho
 
 ## Configuration
 
-Add this hook group to each of these events in `~/.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `PermissionRequest`, `Stop`, `StopFailure`, `SessionEnd`. Use the absolute path to your clone.
+```bash
+./scripts/install-hooks.sh              # add the hook to ~/.claude/settings.json
+./scripts/install-hooks.sh --status     # which events have it
+./scripts/install-hooks.sh --uninstall  # take it out again
+```
+
+The script adds one hook group to eight events, using the absolute path to
+this clone. It backs the file up to `settings.json.headsup.bak` before writing,
+only writes when something changed, leaves your other settings and other hooks
+alone, and refuses to touch a file it cannot parse. Running it twice is a
+no-op. Re-run it if you move the repo.
+
+To do it by hand instead, add this group to each of `UserPromptSubmit`,
+`PreToolUse`, `PostToolUse`, `Notification`, `PermissionRequest`, `Stop`,
+`StopFailure` and `SessionEnd`:
 
 ```json
 { "matcher": "*", "hooks": [ { "type": "command", "command": "bash /path/to/HeadsUp/hooks/headsup-state.sh" } ] }
@@ -210,7 +225,9 @@ HeadsUp/
 │       ├── ticker.ts, color.ts, types.ts
 │       └── tv/                   # robot-heads renderer (geometry, faces, light, sim, render)
 ├── hooks/headsup-state.sh        # Claude Code hook: event → state file
-├── scripts/login-item.sh        # thin wrapper over HeadsUp --login-item
+├── scripts/
+│   ├── install-hooks.sh          # add or remove the hook in settings.json
+│   └── login-item.sh             # thin wrapper over HeadsUp --login-item
 └── build.sh
 ```
 
