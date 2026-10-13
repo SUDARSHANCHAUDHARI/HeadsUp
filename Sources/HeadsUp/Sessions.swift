@@ -24,6 +24,9 @@ enum Sessions {
     struct Reading {
         let id: String
         let state: String
+        /// The folder the session is working in, shown under its head so the
+        /// heads can be told apart. Empty when the hook did not say.
+        let name: String
         let modified: Date
         let url: URL
     }
@@ -56,11 +59,15 @@ enum Sessions {
     private static func read(_ url: URL, id: String, happyHold: TimeInterval) -> Reading? {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-        var state = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Line one is the state, line two the folder; a one-line file is what
+        // the hook wrote before labels existed.
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        var state = (lines.first.map(String.init) ?? "").trimmingCharacters(in: .whitespaces)
         if state.isEmpty { return nil }
+        let name = lines.count > 1 ? String(lines[1]).trimmingCharacters(in: .whitespaces) : ""
         // Happy is a flash at the end of a turn, not a resting state.
         if state == "happy", Date().timeIntervalSince(modified) > happyHold { state = "idle" }
-        return Reading(id: id, state: state, modified: modified, url: url)
+        return Reading(id: id, state: state, name: name, modified: modified, url: url)
     }
 
     /// True once a finished session has had its moment and its head should go.

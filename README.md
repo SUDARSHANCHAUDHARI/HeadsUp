@@ -20,7 +20,7 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 
 ## Features
 
-- One head per live Claude Code session, fanned out side by side
+- One head per live Claude Code session, fanned out side by side, each labelled with the folder it is working in
 - Nine robot states, each with its own LED face, motion and antenna light
 - Transparent, borderless window that floats above all apps and appears on every desktop space
 - Drag the head anywhere; the position is remembered between launches
@@ -83,7 +83,7 @@ cd HeadsUp
 .build/out/Products/Release/HeadsUp
 
 # show a state by hand (one file per session)
-mkdir -p ~/.headsup/sessions && echo thinking > ~/.headsup/sessions/demo.state
+mkdir -p ~/.headsup/sessions && printf 'thinking\nDemo\n' > ~/.headsup/sessions/demo.state
 ```
 
 If your Swift toolchain puts the binary elsewhere, `swift build -c release --show-bin-path` prints the folder.
@@ -176,7 +176,7 @@ at login.
 Claude Code hook event (stdin JSON, carries session_id)
         │
         ▼
-hooks/headsup-state.sh ──► ~/.headsup/sessions/<id>.state  (one word, written atomically)
+hooks/headsup-state.sh ──► ~/.headsup/sessions/<id>.state  (state + folder, written atomically)
                                    │
                                    ▼  the directory is scanned 4× a second
                       HeadsUp (one NSPanel + WKWebView per session)
@@ -185,10 +185,15 @@ hooks/headsup-state.sh ──► ~/.headsup/sessions/<id>.state  (one word, writ
                       robot-heads renderer on a <canvas>
 ```
 
-Every live session gets its own head. A new session's head appears beside the
-others; when a session ends, its head shows `sleeping` for 20 seconds and then
+Every live session gets its own head, with the name of the folder it is working
+in underneath, so four robots on screen are four projects you can tell apart.
+A new session's head appears beside the others; when a session ends, its head shows `sleeping` for 20 seconds and then
 leaves, taking its file with it. A session that dies without a `SessionEnd` —
 a crash, a kill, a reboot — is given an hour before its head is retired anyway.
+
+The state file is two lines: the state, then the folder's name. A one-line file
+is what the hook wrote before labels existed, and still works — that head simply
+has no name under it.
 
 The single `~/.headsup/state` file the hook wrote before sessions existed is
 still read, but only when no session file exists, so an old hook keeps working
