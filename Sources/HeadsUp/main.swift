@@ -1,12 +1,11 @@
 import AppKit
 import WebKit
 
-// A floating robot head that shows what Claude Code is doing.
-// Claude Code hooks write one word to ~/.headsup/state; this app polls it
-// and hands it to the page's window.setState(). The menu bar sets how the
-// head looks through window.setLook().
-
-let stateURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".headsup/state")
+// Floating robot heads that show what Claude Code is doing.
+// Each live session's hook writes one word to ~/.headsup/sessions/<id>.state;
+// this app polls the directory, keeps one head per session, and hands each its
+// word through the page's window.setState(). The menu bar sets how they look
+// through window.setLook().
 // A first guess only: the page reports its real bounds back from setLook(),
 // and they move with the shape and the antenna.
 let headSize = NSSize(width: 132, height: 164) // frameFor(rectangle, antenna, 120) in web/src/main.ts
@@ -29,14 +28,16 @@ final class HeadView: WKWebView {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSMenuDelegate {
-    var panel: NSPanel!
-    var web: HeadView!
-    var shown = ""
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    /// One head per session id, in the order they appeared.
+    var heads: [String: Head] = [:]
+    var order: [String] = []
+    var hidden = false
     var timer: Timer?
     var status: NSStatusItem!
     let stateItem = NSMenuItem(title: "State: —", action: nil, keyEquivalent: "")
     let visibilityItem = NSMenuItem(title: "Hide Head", action: #selector(toggleHead), keyEquivalent: "")
+    let sessionsItem = NSMenuItem(title: "Sessions: —", action: nil, keyEquivalent: "")
     let loginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleLogin), keyEquivalent: "")
     let pauseItem = NSMenuItem(title: "Pause Animation", action: #selector(togglePause), keyEquivalent: "")
     let antennaItem = NSMenuItem(title: "Antenna", action: #selector(toggleAntenna), keyEquivalent: "")
@@ -45,32 +46,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let about = AboutWindow()
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        panel = NSPanel(contentRect: NSRect(origin: .zero, size: headSize),
-                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        panel.hidesOnDeactivate = false
-        if !panel.setFrameUsingName("HeadsUp") {
-            let screen = NSScreen.main?.visibleFrame ?? .zero
-            panel.setFrameOrigin(NSPoint(x: screen.maxX - headSize.width - 24, y: screen.minY + 24))
-        }
-        panel.setFrameAutosaveName("HeadsUp")
-
-        web = HeadView(frame: NSRect(origin: .zero, size: headSize), configuration: WKWebViewConfiguration())
-        // Undocumented KVC key; the only way to give WKWebView a transparent background on macOS.
-        web.setValue(false, forKey: "drawsBackground")
-        web.navigationDelegate = self
-        panel.contentView = web
-
-        guard let dir = Bundle.module.url(forResource: "web", withExtension: nil) else {
-            fatalError("web resources missing from bundle; run ./build.sh")
-        }
-        web.loadFileURL(dir.appendingPathComponent("index.html"), allowingReadAccessTo: dir)
-        panel.orderFrontRegardless()
         buildStatusItem()
+        poll()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.poll() }
+    }
+
+    // One pass over the session files: open heads for new sessions, update the
+    // ones already on screen, and retire the sessions that have finished.
+    func poll() {
+        let readings = Sessions.read(happyHold: happyHold)
+        var live: Set<String> = []
+
+        for reading in readings {
+            if Sessions.isOver(reading) {
+                Sessions.forget(reading)
+                continue
+            }
+            live.insert(reading.id)
+            if let head = heads[reading.id] {
+                head.setState(reading.state)
+            } else {
+                open(reading)
+            }
+        }
+
+        for id in order where !live.contains(id) { close(id) }
+    }
+
+    func open(_ reading: Sessions.Reading) {
+        // The first head keeps the remembered position; the rest fan out to its
+        // left, so a second session never lands exactly on top of the first.
+        let first = order.isEmpty
+        let step = CGFloat(order.count) * (headSize.width + 16)
+        let screen = NSScreen.main?.visibleFrame ?? .zero
+        let origin = NSPoint(x: screen.maxX - headSize.width - 24 - step, y: screen.minY + 24)
+
+        let head = Head(session: reading.id, look: look, origin: origin, autosave: first ? "HeadsUp" : nil)
+        if hidden { head.hide() }
+        head.setState(reading.state)
+        heads[reading.id] = head
+        order.append(reading.id)
+    }
+
+    func close(_ id: String) {
+        heads.removeValue(forKey: id)?.close()
+        order.removeAll { $0 == id }
     }
 
     // The head has no Dock icon, so the menu bar is where everything else lives.
@@ -88,6 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         menu.delegate = self
         stateItem.isEnabled = false
         menu.addItem(stateItem)
+        sessionsItem.isEnabled = false
+        menu.addItem(sessionsItem)
         menu.addItem(.separator())
         visibilityItem.target = self
         menu.addItem(visibilityItem)
@@ -134,8 +156,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     // Both toggles can change behind our back, so read the truth on open.
     func menuWillOpen(_ menu: NSMenu) {
-        stateItem.title = "State: \(shown.isEmpty ? currentState() : shown)"
-        visibilityItem.title = panel.isVisible ? "Hide Head" : "Show Head"
+        let states = order.compactMap { heads[$0]?.state }.filter { !$0.isEmpty }
+        stateItem.title = "State: \(states.first ?? "—")"
+        switch order.count {
+        case 0: sessionsItem.title = "No sessions"
+        case 1: sessionsItem.title = "1 session"
+        default: sessionsItem.title = "\(order.count) sessions: \(states.joined(separator: ", "))"
+        }
+        visibilityItem.title = hidden ? "Show Heads" : "Hide Heads"
         loginItem.state = LoginItem.isInstalled ? .on : .off
         antennaItem.state = look.antenna ? .on : .off
         pauseItem.state = look.paused ? .on : .off
@@ -194,33 +222,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         pushLook()
     }
 
-    // The page owns the head's bounds, so take the size it reports and fit the
-    // window to it, keeping the top-left corner where it was.
     func pushLook() {
-        web.evaluateJavaScript("setLook(\(look.json))") { [weak self] result, error in
-            if let error {
-                NSLog("HeadsUp: setLook failed: \(error)")
-                return
-            }
-            guard let self,
-                  let size = (result as? [NSNumber])?.map(\.doubleValue),
-                  size.count == 2, size[0] > 0, size[1] > 0
-            else { return }
-            self.resizeHead(to: NSSize(width: size[0], height: size[1]))
-        }
-    }
-
-    func resizeHead(to size: NSSize) {
-        guard panel.frame.size != size else { return }
-        var next = panel.frame
-        next.origin.y = next.maxY - size.height
-        next.size = size
-        panel.setFrame(next, display: true)
-        web.frame = NSRect(origin: .zero, size: size)
+        for head in heads.values { head.apply(look) }
     }
 
     @objc func toggleHead() {
-        if panel.isVisible { panel.orderOut(nil) } else { panel.orderFrontRegardless() }
+        hidden.toggle()
+        for head in heads.values {
+            if hidden { head.hide() } else { head.show() }
+        }
     }
 
     @objc func toggleLogin() {
@@ -241,48 +251,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         loginItem.state = LoginItem.isInstalled ? .on : .off
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // A reload would otherwise leave the previous poller running, and the
-        // fresh page knows nothing of what the old one was showing.
-        timer?.invalidate()
-        shown = ""
-        // A fresh page is back on the stock look, so send ours before anything
-        // is drawn.
-        pushLook()
-        poll()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.poll() }
-    }
-
-    func poll() {
-        let next = currentState()
-        guard next != shown else { return }
-        // Record it only once the page took it, so a failed call is retried.
-        web.evaluateJavaScript("setState(\(jsString(next)))") { [weak self] _, error in
-            if let error {
-                NSLog("HeadsUp: setState failed: \(error)")
-                return
-            }
-            self?.shown = next
-        }
-    }
-
-    // No file yet means no session has run: show it asleep.
-    func currentState() -> String {
-        guard let text = try? String(contentsOf: stateURL, encoding: .utf8) else { return "sleeping" }
-        let state = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if state == "happy",
-           let modified = try? stateURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
-           Date().timeIntervalSince(modified) > happyHold {
-            return "idle"
-        }
-        return state
-    }
-
-    func jsString(_ s: String) -> String {
-        let data = try? JSONSerialization.data(withJSONObject: [s])
-        let array = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[\"idle\"]"
-        return String(array.dropFirst().dropLast())
-    }
 }
 
 // `HeadsUp --login-item …` manages the LaunchAgent and exits without a window.
