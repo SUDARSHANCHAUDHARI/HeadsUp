@@ -4,6 +4,12 @@
 
 > A floating robot head on your Mac that shows what Claude Code is doing right now.
 
+<div align="center">
+
+<img src="docs/screenshot.png" alt="The HeadsUp robot on the desktop, showing the error state" width="212">
+
+</div>
+
 HeadsUp is a small native macOS app. Claude Code hooks tell it what the agent is doing, and an animated robot head in a transparent always-on-top window shows it: thinking, searching, working, waiting for you, done, failed or asleep.
 
 ## Overview
