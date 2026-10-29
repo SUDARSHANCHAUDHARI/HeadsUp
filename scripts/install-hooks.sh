@@ -121,6 +121,7 @@ if mode == "status":
         print(f"  {mark}  {event} ({which})")
     sys.exit(0)
 
+
 def retime(event, command, timeout):
     """Bring an already-installed entry's timeout up to date.
 
