@@ -16,6 +16,7 @@ touched. A missing real file is not a failure; a small fixture is used instead.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -183,7 +184,21 @@ def main():
     ]
     check("the ask hook is registered once", 1, len(entries))
     if entries:
-        check("the ask hook clears its own 60s wait", 70, entries[0].get("timeout"))
+        # The invariant, not the number: Claude Code must not kill the hook
+        # mid-wait, or the click is lost. The hook's own default is read from
+        # the hook, so raising one side without the other cannot pass quietly.
+        with open(os.path.join(REPO, "hooks", "headsup-ask.sh"), encoding="utf-8") as f:
+            found = re.search(r"HEADSUP_ASK_TIMEOUT:-(\d+)", f.read())
+        hook_wait = int(found.group(1)) if found else None
+        registered = entries[0].get("timeout")
+        if hook_wait is None:
+            bad("the ask hook's timeout clears its own wait", "no HEADSUP_ASK_TIMEOUT default found")
+        else:
+            check(
+                f"the ask hook's {registered}s timeout clears its own {hook_wait}s wait",
+                True,
+                isinstance(registered, int) and registered > hook_wait,
+            )
 
     state_events = {
         event
@@ -210,6 +225,28 @@ def main():
     check("file unchanged by the second run", before_second, load(path))
     check("no second backup", 1, len([n for n in os.listdir(tmp) if ".bak" in n]))
 
+    print("\nan install retimes an entry left behind by an older version")
+    # Simulate upgrading from a version whose ask hook waited less: the
+    # command is identical, so only the timeout marks it as stale.
+    stale = load(path)
+    for group in stale["hooks"]["PermissionRequest"]:
+        for e in group.get("hooks", []):
+            if e.get("command") == ASK_COMMAND:
+                e["timeout"] = 70
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(stale, f, indent=2)
+    result = run(path)
+    retimed = [
+        e
+        for group in load(path)["hooks"]["PermissionRequest"]
+        for e in group.get("hooks", [])
+        if e.get("command") == ASK_COMMAND
+    ]
+    check("the stale timeout was brought up to date", registered, retimed[0].get("timeout") if retimed else None)
+    check("the ask hook is still registered once", 1, len(retimed))
+    check("retiming reported a change", True, "nothing to change" not in result.stdout)
+    check("foreign groups survive the retime", original_foreign, foreign(load(path)))
+
     print("\nuninstall")
     result = run(path, "--uninstall")
     if result.returncode != 0:
@@ -231,7 +268,9 @@ def main():
         if e.get("command") in OURS
     ]
     check("nothing of ours is left", [], leftovers)
-    check("two backups now exist", 2, len([n for n in os.listdir(tmp) if ".bak" in n]))
+    # One per run that actually wrote: the install, the retime, the uninstall.
+    # The no-op second install wrote nothing and so backed nothing up.
+    check("three backups now exist", 3, len([n for n in os.listdir(tmp) if ".bak" in n]))
 
     print("\nrefusing to write what it cannot read")
     broken = os.path.join(tmp, "broken.json")
