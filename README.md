@@ -10,11 +10,13 @@
 
 </div>
 
-HeadsUp is a small native macOS app. Claude Code hooks tell it what the agent is doing, and an animated robot head in a transparent always-on-top window shows it: thinking, searching, working, waiting for you, done, failed or asleep.
+HeadsUp is a small native macOS app. Claude Code hooks tell it what the agent is doing, and an animated robot head in a transparent always-on-top window shows it: thinking, searching, working, waiting for you, done, failed or asleep. When Claude asks permission to run something, Allow and Deny appear under the head, so you can answer without going back to the terminal.
 
 ## Overview
 
-When Claude Code runs in a terminal behind other windows, you cannot see at a glance whether it is still working, waiting for a permission, or finished. HeadsUp puts that status on screen as a small robot that sits above every app and every desktop space.
+When Claude Code runs in a terminal behind other windows, you cannot see at a glance whether it is still working, waiting for a permission, or finished. HeadsUp puts that status on screen as a small robot that sits above every app and every desktop space — and lets you answer the permission there too.
+
+Answering is the part that has to be safe rather than clever. The hook that waits for your click fails open: with HeadsUp closed, or crashed, or just slow to start, a permission prompt behaves exactly as it would if HeadsUp were never installed. Nothing waits on a window that is not there, and the terminal dialog stays available the whole time.
 
 The robot is the drawing engine from [robot-heads](https://github.com/fayazara/robot-heads) by Fayaz Ahmed (MIT), used without React. HeadsUp adds the macOS window, the state file and the Claude Code hook.
 
@@ -28,8 +30,10 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 - Menu-bar icon showing how many sessions are running, with each one's project and state behind it, plus Hide Heads, Start at Login, About, Credits and Quit
 - Pick the head's shape, shell, trim, screen colour and animation speed from the menu bar; the choice is remembered
 - Right-click the head to quit; no Dock icon
-- One hook script maps Claude Code events to states, always exits 0 and never blocks Claude
-- One command installs that hook into `~/.claude/settings.json`, and takes it out again
+- **Allow or Deny a permission from the head itself** — one click, no window switching; the terminal dialog still works, and whichever is answered first wins
+- **Approve a plan or send it back** — plan mode arrives on the same channel, so the buttons read Approve and Send back, and sending it back asks Claude what should be different
+- Two hook scripts: one maps events to states and never blocks Claude, the other waits for your click on a permission and **fails open** — no HeadsUp running, no change to how prompts behave
+- One command installs both into `~/.claude/settings.json`, and takes them out again. It only ever adds or removes its own two entries: every other hook, and your `statusLine`, are left exactly as they were, and the previous file is kept with a timestamp
 - Shows `happy` when a turn ends, then returns to `idle` after 5 seconds
 - Eyes and head follow the pointer when it is near
 - With macOS Reduce Motion on, shows still poses instead of animating
@@ -99,16 +103,21 @@ If your Swift toolchain puts the binary elsewhere, `swift build -c release --sho
 ## Configuration
 
 ```bash
-./scripts/install-hooks.sh              # add the hook to ~/.claude/settings.json
-./scripts/install-hooks.sh --status     # which events have it
-./scripts/install-hooks.sh --uninstall  # take it out again
+./scripts/install-hooks.sh              # add the hooks to ~/.claude/settings.json
+./scripts/install-hooks.sh --status     # which events have them
+./scripts/install-hooks.sh --uninstall  # take them out again
 ```
 
-The script adds one hook group to eight events, using the absolute path to
-this clone. It backs the file up to `settings.json.headsup.bak` before writing,
-only writes when something changed, leaves your other settings and other hooks
-alone, and refuses to touch a file it cannot parse. Running it twice is a
-no-op. Re-run it if you move the repo.
+The script adds two things, using the absolute path to this clone: the status
+hook on eight events, and the ask hook on `PermissionRequest` with a 70-second
+timeout, which has to clear that hook's own 60-second wait.
+
+It backs the file up to `settings.json.headsup-<timestamp>.bak` before writing,
+only writes when something changed, and refuses to touch a file it cannot
+parse. It adds and removes **only its own two entries** — every other hook, and
+your `statusLine`, come out byte-for-byte unchanged, which
+`Tests/install-hooks.test.py` checks against a copy of your real settings file.
+Running it twice is a no-op. Re-run it if you move the repo.
 
 To do it by hand instead, add this group to each of `UserPromptSubmit`,
 `PreToolUse`, `PostToolUse`, `Notification`, `PermissionRequest`, `Stop`,
@@ -225,10 +234,19 @@ No state file yet means no session has run, so the head sleeps. Unknown events l
 ./build.sh                          # bundle web/src with bun, copy into the Swift target, swift build -c release
 swift build                         # debug build of the app only (run ./build.sh once first)
 
-# feed the hook a sample event
+swift test                          # the app: Sessions, Ask, Look, and the hook end to end
+bash Tests/ask-hook.test.sh         # the ask hook: failing open, deciding, falling back
+python3 Tests/install-hooks.test.py # the installer, against a copy of your real settings.json
+
+# feed the status hook a sample event
 printf '{"hook_event_name":"PreToolUse","tool_name":"Grep"}' | bash hooks/headsup-state.sh
 cat ~/.headsup/state                # searching
 ```
+
+`AskHookIntegrationTests` runs `hooks/headsup-ask.sh` as a real subprocess
+against the real `Ask` reader, because that seam is where a format change
+would break the feature silently: the hook would wait, the head would show
+nothing, and the session would hang until the timeout.
 
 ## Project Structure
 
@@ -240,6 +258,7 @@ HeadsUp/
 │   ├── main.swift                # the menu bar, and one head per session
 │   ├── Head.swift                # one panel, one web view, one session's state
 │   ├── Sessions.swift            # which sessions are live, and when a head retires
+│   ├── Ask.swift                 # pending permissions, the answers, and the heartbeat
 │   ├── Look.swift                # the saved appearance, and the JSON the page gets
 │   ├── AboutWindow.swift         # the About and Credits panels
 │   └── LoginItem.swift           # the LaunchAgent, shared by the CLI and the menu
@@ -249,9 +268,12 @@ HeadsUp/
 │       ├── main.ts               # plain-DOM wrapper, exposes window.setState and setLook
 │       ├── ticker.ts, color.ts, types.ts
 │       └── tv/                   # robot-heads renderer (geometry, faces, light, sim, render)
-├── hooks/headsup-state.sh        # Claude Code hook: event → per-session state file
+├── hooks/
+│   ├── headsup-state.sh          # event → per-session state file; never blocks
+│   └── headsup-ask.sh            # PermissionRequest → waits for your click; fails open
+├── Tests/                        # the hook and installer tests, beside the Swift ones (swift test covers the app)
 ├── scripts/
-│   ├── install-hooks.sh          # add or remove the hook in settings.json
+│   ├── install-hooks.sh          # add or remove this repo's two hooks in settings.json
 │   ├── package-release.sh        # HeadsUp.app + zip, signed when a cert exists
 │   └── login-item.sh             # thin wrapper over HeadsUp --login-item
 └── build.sh
