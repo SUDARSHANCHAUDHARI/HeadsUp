@@ -103,7 +103,13 @@ enum Sessions {
         // usually already gone by the time SessionEnd's file lands.
         if reading.state == "sleeping" { return age > farewell }
         // The session's process is gone: closing a terminal fires no
-        // SessionEnd, so there is nothing to wait an hour for.
+        // SessionEnd, so there is nothing to wait an hour for. Liveness
+        // replaces the hour here rather than adding to it, because a live
+        // session left idle overnight must keep its head, and its file's mtime
+        // is as old as its last event.
+        // shortcut: a pid recycled onto an unrelated process keeps the head
+        // until HeadsUp restarts; upgrade to checking the pid is still a
+        // claude process if that is ever seen in practice.
         if let owner = reading.owner { return !isRunning(owner) }
         return age > abandoned
     }

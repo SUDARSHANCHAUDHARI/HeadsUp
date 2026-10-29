@@ -185,9 +185,18 @@ final class SessionsTests: XCTestCase {
         XCTAssertTrue(Sessions.isOver(reading, isRunning: { _ in false }))
     }
 
+    /// Liveness replaces the hour for an owned file rather than adding to it:
+    /// a session left idle overnight is still a session, and its file's mtime
+    /// is only as fresh as its last event.
     func testASessionWhoseProcessIsAliveKeepsItsHeadPastTheHour() throws {
         try writeOwned("working", session: "a", owner: 4242, ago: Sessions.abandoned + 60)
         XCTAssertFalse(Sessions.isOver(try XCTUnwrap(read().first), isRunning: { _ in true }))
+
+        // Idle for a day and still running: still its head.
+        try writeOwned("idle", session: "b", owner: 4242, ago: 60 * 60 * 24)
+        XCTAssertFalse(
+            Sessions.isOver(try XCTUnwrap(read().first(where: { $0.id == "b" })), isRunning: { _ in true })
+        )
     }
 
     /// A live session still gets its goodbye, so the sleeping face is seen.
