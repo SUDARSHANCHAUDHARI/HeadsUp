@@ -26,7 +26,20 @@ final class SessionsTests: XCTestCase {
     private func write(_ state: String, session: String, name: String = "", ago: TimeInterval = 0) throws {
         let url = session.isEmpty ? legacy! : directory.appendingPathComponent("\(session).state")
         try "\(state)\n\(name)\n".write(to: url, atomically: true, encoding: .utf8)
-        if ago > 0 {
+        if ago != 0 {
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date().addingTimeInterval(-ago)], ofItemAtPath: url.path
+            )
+        }
+    }
+
+    /// The four-line file a v0.6 hook writes, owner pid included.
+    private func writeOwned(
+        _ state: String, session: String, owner: pid_t, ago: TimeInterval = 0
+    ) throws {
+        let url = directory.appendingPathComponent("\(session).state")
+        try "\(state)\n\(session)\n\n\(owner)\n".write(to: url, atomically: true, encoding: .utf8)
+        if ago != 0 {
             try FileManager.default.setAttributes(
                 [.modificationDate: Date().addingTimeInterval(-ago)], ofItemAtPath: url.path
             )
@@ -160,6 +173,71 @@ final class SessionsTests: XCTestCase {
     func testTheLegacyHeadIsNeverRetired() throws {
         try write("sleeping", session: "", ago: Sessions.abandoned + 60)
         XCTAssertFalse(Sessions.isOver(try XCTUnwrap(read().first)))
+    }
+
+    /// The reason four heads outlived their sessions: closing a terminal fires
+    /// no SessionEnd, so the head had to wait out the hour. A dead owner pid
+    /// retires it at once.
+    func testASessionWhoseProcessIsGoneIsRetiredAtOnce() throws {
+        try writeOwned("working", session: "a", owner: 4242)
+        let reading = try XCTUnwrap(read().first)
+        XCTAssertEqual(reading.owner, 4242)
+        XCTAssertTrue(Sessions.isOver(reading, isRunning: { _ in false }))
+    }
+
+    /// Liveness replaces the hour for an owned file rather than adding to it:
+    /// a session left idle overnight is still a session, and its file's mtime
+    /// is only as fresh as its last event.
+    func testASessionWhoseProcessIsAliveKeepsItsHeadPastTheHour() throws {
+        try writeOwned("working", session: "a", owner: 4242, ago: Sessions.abandoned + 60)
+        XCTAssertFalse(Sessions.isOver(try XCTUnwrap(read().first), isRunning: { _ in true }))
+
+        // Idle for a day and still running: still its head.
+        try writeOwned("idle", session: "b", owner: 4242, ago: 60 * 60 * 24)
+        XCTAssertFalse(
+            Sessions.isOver(try XCTUnwrap(read().first(where: { $0.id == "b" })), isRunning: { _ in true })
+        )
+    }
+
+    /// A live session still gets its goodbye, so the sleeping face is seen.
+    func testAnOwnedSessionStillShowsItsFarewell() throws {
+        try writeOwned("sleeping", session: "a", owner: 4242)
+        XCTAssertFalse(Sessions.isOver(try XCTUnwrap(read().first), isRunning: { _ in false }))
+
+        try writeOwned("sleeping", session: "a", owner: 4242, ago: Sessions.farewell + 5)
+        XCTAssertTrue(Sessions.isOver(try XCTUnwrap(read().first), isRunning: { _ in false }))
+    }
+
+    /// A file dated in the future has a negative age, so every `age >` test
+    /// fails and the head would never leave the screen.
+    func testAFileDatedInTheFutureIsRetired() throws {
+        try write("working", session: "a", ago: -(60 * 60 * 24))
+        XCTAssertTrue(Sessions.isOver(try XCTUnwrap(read().first)))
+
+        try write("sleeping", session: "b", ago: -(60 * 60 * 24))
+        XCTAssertTrue(Sessions.isOver(try XCTUnwrap(read().last)))
+    }
+
+    /// A three-line file from a pre-v0.6 hook has no owner, so it must keep
+    /// the age fallback rather than being retired for having no pid.
+    func testAnOwnerlessFileFallsBackToAge() throws {
+        try write("working", session: "a")
+        XCTAssertNil(try XCTUnwrap(read().first).owner)
+        XCTAssertFalse(Sessions.isOver(try XCTUnwrap(read().first), isRunning: { _ in false }))
+
+        try write("working", session: "a", ago: Sessions.abandoned + 60)
+        XCTAssertTrue(Sessions.isOver(try XCTUnwrap(read().first), isRunning: { _ in false }))
+    }
+
+    /// Nothing owns pid 0, and a blank fourth line is not an owner either.
+    func testAnUnusablePidIsNoOwner() throws {
+        try writeOwned("working", session: "a", owner: 0)
+        XCTAssertNil(try XCTUnwrap(read().first).owner)
+
+        try "working\na\n\n\n".write(
+            to: directory.appendingPathComponent("b.state"), atomically: true, encoding: .utf8
+        )
+        XCTAssertNil(read().first(where: { $0.id == "b" })?.owner)
     }
 
     func testForgettingASessionRemovesItsFileButSparesTheLegacyOne() throws {
