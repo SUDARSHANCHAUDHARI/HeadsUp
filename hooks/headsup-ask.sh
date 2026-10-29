@@ -13,11 +13,12 @@ dir="$HOME/.headsup"
 ask="$dir/ask"
 alive="$dir/alive"
 
-# 60s, not the 300s TwoCode uses: it is not yet confirmed that the terminal
-# dialog stays usable while this waits, and 60s of a stuck prompt is
-# recoverable where 300s is not.
+# 300s, matching TwoCode. Confirmed in a real session on 30 Oct 2026: Claude
+# Code shows its own dialog at the same time as the head, and whichever is
+# answered first wins, so a long wait is never a stuck prompt — the terminal
+# is always still there to answer.
 # The two overrides are a seam for the tests; a real session never sets them.
-timeout_s=${HEADSUP_ASK_TIMEOUT:-60}
+timeout_s=${HEADSUP_ASK_TIMEOUT:-300}
 poll_s=${HEADSUP_ASK_POLL:-0.2}
 # A heartbeat older than this means the app died without clearing the file.
 stale_s=30

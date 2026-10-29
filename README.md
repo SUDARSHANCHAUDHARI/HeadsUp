@@ -111,8 +111,12 @@ If your Swift toolchain puts the binary elsewhere, `swift build -c release --sho
 ```
 
 The script adds two things, using the absolute path to this clone: the status
-hook on eight events, and the ask hook on `PermissionRequest` with a 70-second
-timeout, which has to clear that hook's own 60-second wait.
+hook on eight events, and the ask hook on `PermissionRequest` with a
+310-second timeout, which has to clear that hook's own 300-second wait.
+
+A long wait costs nothing, because Claude Code shows its own permission dialog
+at the same time as the head and whichever is answered first wins. The terminal
+is never taken away from you.
 
 It backs the file up to `settings.json.headsup-<timestamp>.bak` before writing,
 only writes when something changed, and refuses to touch a file it cannot

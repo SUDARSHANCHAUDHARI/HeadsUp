@@ -55,9 +55,9 @@ STATE_EVENTS = [
     "PermissionRequest", "Stop", "StopFailure", "SessionEnd",
 ]
 # The blocking hook: one event only. Its timeout must clear the hook's own
-# 60s wait, or Claude Code would kill it mid-wait and the click would be lost.
+# 300s wait, or Claude Code would kill it mid-wait and the click would be lost.
 ASK_EVENT = "PermissionRequest"
-ASK_TIMEOUT = 70
+ASK_TIMEOUT = 310
 
 # (event, the entry to add) for everything this script owns.
 WANTED = [(event, {"type": "command", "command": state_command}) for event in STATE_EVENTS]
@@ -121,10 +121,30 @@ if mode == "status":
         print(f"  {mark}  {event} ({which})")
     sys.exit(0)
 
+def retime(event, command, timeout):
+    """Bring an already-installed entry's timeout up to date.
+
+    Without this an upgrade keeps the timeout it was first installed with:
+    the command is unchanged, so the check above says there is nothing to do,
+    and a hook that now waits longer than its registered timeout would be
+    killed mid-wait with the click lost.
+    """
+    for group in hooks.get(event) or []:
+        if not isinstance(group, dict):
+            continue
+        for e in group.get("hooks") or []:
+            if isinstance(e, dict) and e.get("command") == command and e.get("timeout") != timeout:
+                e["timeout"] = timeout
+                return True
+    return False
+
+
 changed = []
 if mode == "install":
     for event, entry in WANTED:
         if installed(event, entry["command"]):
+            if "timeout" in entry and retime(event, entry["command"], entry["timeout"]):
+                changed.append(f"{event} (ask timeout -> {entry['timeout']}s)")
             continue
         groups(event).append({"matcher": "*", "hooks": [dict(entry)]})
         which = "ask" if entry["command"] == ask_command else "status"
@@ -164,7 +184,8 @@ with open(tmp, "w", encoding="utf-8") as f:
     f.write("\n")
 os.replace(tmp, path)
 
-verb = "added to" if mode == "install" else "removed from"
+# "updated", not "added to": an install can now also retime an existing entry.
+verb = "updated" if mode == "install" else "removed from"
 print(f"{verb} {len(changed)} event(s): {', '.join(changed)}")
 print("Open sessions keep their old hooks; new sessions pick this up.")
 PY
