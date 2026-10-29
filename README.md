@@ -212,11 +212,15 @@ Every live session gets its own head, with the name of the folder it is working
 in underneath, so four robots on screen are four projects you can tell apart.
 A new session's head appears beside the others; when a session ends, its head shows `sleeping` for 20 seconds and then
 leaves, taking its file with it. A session that dies without a `SessionEnd` —
-a crash, a kill, a reboot — is given an hour before its head is retired anyway.
+a crash, a kill, or simply closing the terminal window, which fires no
+`SessionEnd` at all — loses its head as soon as its process is gone, because
+the hook records which process the session belongs to. Where that is not known,
+an hour is the fallback.
 
-The state file is two lines: the state, then the folder's name. A one-line file
-is what the hook wrote before labels existed, and still works — that head simply
-has no name under it.
+The state file is four lines: the state, the folder's name, what the current
+tool is doing, and the pid of the session's Claude Code process. A shorter file
+is what an earlier hook wrote, and still works — a missing line is a missing
+value, never a reason to drop the head.
 
 The single `~/.headsup/state` file the hook wrote before sessions existed is
 still read, but only when no session file exists, so an old hook keeps working
@@ -331,10 +335,13 @@ source is the only route that does not trip Gatekeeper.
 
 ## Status
 
-Complete, at v0.5.0. It does what it set out to do: nine states render, the
+Complete, at v0.6.0. It does what it set out to do: nine states render, the
 hook drives one head per live Claude Code session, each head is labelled with
-its project, and drag, quit and the menu-bar look options all work. No feature
-work is planned.
+its project and with what the current tool is doing, and drag, quit and the
+menu-bar look options all work. Since 0.6 a head can also **answer** — Allow,
+Deny, or send a plan back — and chimes when a turn ends. A head goes away when
+its session's process does, so closing a terminal does not leave one behind.
+No further feature work is planned.
 
 Releases ship source rather than a binary, because the app is not signed or
 notarised — that needs a paid Apple Developer membership, not code.
@@ -358,7 +365,7 @@ The robot itself is not my work. The drawing engine comes from
 [Fayaz Ahmed](https://github.com/fayazara), used under the MIT licence.
 
 These files are copied from it unchanged, and are the larger part of this repo
-(1,946 of its 2,129 source lines):
+(1,946 of its 2,152 TypeScript lines):
 
 - `web/src/tv/geometry.ts`, `faces.ts`, `light.ts`, `sim.ts`, `render.ts`
 - `web/src/ticker.ts`, `web/src/color.ts`, `web/src/types.ts`
