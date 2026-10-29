@@ -2,7 +2,7 @@
 """Tests for scripts/install-hooks.sh — the one script that writes a file the
 user did not give us.
 
-    python3 tests/install-hooks.test.py
+    python3 Tests/install-hooks.test.py
 
 It runs against a *copy* of the real ~/.claude/settings.json when there is one,
 because that file is where the risk actually lives: it holds dozens of hook
@@ -194,7 +194,8 @@ def main():
     print("\nrunning it twice changes nothing")
     before_second = load(path)
     result = run(path)
-    check("second install is a no-op", "nothing to change", result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "")
+    last = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+    check("second install is a no-op", "nothing to change", last)
     check("file unchanged by the second run", before_second, load(path))
     check("no second backup", 1, len([n for n in os.listdir(tmp) if ".bak" in n]))
 

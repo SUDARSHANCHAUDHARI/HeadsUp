@@ -7,8 +7,8 @@
 #   ./scripts/install-hooks.sh --uninstall  # take it out again
 #
 # The file is only rewritten when something changed, and the previous copy is
-# kept next to it with a timestamp, so a later run cannot overwrite it. Open Claude Code sessions keep their old hooks; new ones
-# pick this up.
+# kept next to it with a timestamp, so a later run cannot overwrite it.
+# Open Claude Code sessions keep their old hooks; new ones pick this up.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
