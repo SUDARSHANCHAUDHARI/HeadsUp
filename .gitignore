@@ -4,3 +4,4 @@ Sources/HeadsUp/Resources/
 web/dist/
 dist/
 .DS_Store
+.flow/
