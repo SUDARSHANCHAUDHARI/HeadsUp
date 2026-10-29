@@ -27,6 +27,10 @@ enum Sessions {
         /// The folder the session is working in, shown under its head so the
         /// heads can be told apart. Empty when the hook did not say.
         let name: String
+        /// What the current tool is doing — a command, a file name. Empty when
+        /// nothing is running, and empty for the two-line files an older hook
+        /// wrote before v0.6.
+        let detail: String
         let modified: Date
         let url: URL
     }
@@ -59,15 +63,18 @@ enum Sessions {
     private static func read(_ url: URL, id: String, happyHold: TimeInterval) -> Reading? {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-        // Line one is the state, line two the folder; a one-line file is what
-        // the hook wrote before labels existed.
+        // Line one is the state, line two the folder, line three what the tool
+        // is doing. A shorter file is what an older hook wrote — one line
+        // before labels existed, two before detail — so a missing line is a
+        // missing value, never a reason to drop the head.
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         var state = (lines.first.map(String.init) ?? "").trimmingCharacters(in: .whitespaces)
         if state.isEmpty { return nil }
         let name = lines.count > 1 ? String(lines[1]).trimmingCharacters(in: .whitespaces) : ""
+        let detail = lines.count > 2 ? String(lines[2]).trimmingCharacters(in: .whitespaces) : ""
         // Happy is a flash at the end of a turn, not a resting state.
         if state == "happy", Date().timeIntervalSince(modified) > happyHold { state = "idle" }
-        return Reading(id: id, state: state, name: name, modified: modified, url: url)
+        return Reading(id: id, state: state, name: name, detail: detail, modified: modified, url: url)
     }
 
     /// True once a finished session has had its moment and its head should go.

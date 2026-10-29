@@ -89,6 +89,21 @@ final class SessionsTests: XCTestCase {
         XCTAssertEqual(read().first?.name, "MyApp")
     }
 
+    func testTheThirdLineIsWhatTheToolIsDoing() throws {
+        try "working\nMyApp\nnpm install\n"
+            .write(to: directory.appendingPathComponent("a.state"), atomically: true, encoding: .utf8)
+
+        let found = read()
+        XCTAssertEqual(found.first?.name, "MyApp")
+        XCTAssertEqual(found.first?.detail, "npm install")
+    }
+
+    func testAnEmptyThirdLineMeansNothingIsRunning() throws {
+        try "happy\nMyApp\n\n"
+            .write(to: directory.appendingPathComponent("a.state"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(read().first?.detail, "")
+    }
+
     /// The hook wrote one line before labels existed; that file still works,
     /// it just has no name to show.
     func testAOneLineFileHasNoName() throws {
@@ -97,6 +112,18 @@ final class SessionsTests: XCTestCase {
         let found = read()
         XCTAssertEqual(found.first?.state, "thinking")
         XCTAssertEqual(found.first?.name, "")
+        XCTAssertEqual(found.first?.detail, "")
+    }
+
+    /// And two lines before detail existed: a hook from v0.5 against the v0.6
+    /// app must keep working, since the two update separately.
+    func testATwoLineFileHasNoDetail() throws {
+        try write("working", session: "a", name: "MyApp")
+
+        let found = read()
+        XCTAssertEqual(found.first?.state, "working")
+        XCTAssertEqual(found.first?.name, "MyApp")
+        XCTAssertEqual(found.first?.detail, "")
     }
 
     func testAnEmptyFileIsNotASession() throws {
