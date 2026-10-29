@@ -80,10 +80,38 @@ esac
 printf 'the file keeps its shape\n'
 
 run PreToolUse Bash '{"command":"ls"}'
-check "three lines" "3" "$(wc -l < "$home/.headsup/sessions/s1.state" | tr -d ' ')"
+check "four lines" "4" "$(wc -l < "$home/.headsup/sessions/s1.state" | tr -d ' ')"
 
 run PreToolUse UnknownTool '{"whatever":1}'
-check "unknown tool: no detail, still three lines" "" "$(line 3)"
+check "unknown tool: no detail, still four lines" "" "$(line 3)"
+
+# Line four is the owning claude pid, so the app can retire a head the moment
+# its session is gone. The test runs under bash, not claude, so the walk up the
+# ancestry finds nothing and the line is correctly empty — what an older hook
+# wrote too, which is the case the app must still cope with.
+printf 'line four is the owning pid\n'
+# Either empty or a live pid, never junk. It cannot be asserted as empty here:
+# this suite is often run from inside a Claude Code session, and then the walk
+# correctly finds that session's own process a few levels up.
+run PreToolUse Bash '{"command":"ls"}'
+owner=$(line 4)
+if [ -z "$owner" ] || { [ "$owner" -gt 0 ] 2>/dev/null && kill -0 "$owner" 2>/dev/null; }; then
+  pass=$((pass + 1)); printf '  ok    owner is empty or a live pid (%s)\n' "${owner:-empty}"
+else
+  fail=$((fail + 1)); printf '  FAIL  owner is neither empty nor a live pid: %s\n' "$owner"
+fi
+
+# A copy of bash named `claude` gives the walk a real ancestor to find: ps
+# reports the executable's path, so the copy's name is what the hook matches
+# on. Its own pid is what must land on line four.
+shim="$home/claude"
+cp /bin/bash "$shim"
+owner=$(HOME="$home" "$shim" -c '
+  printf "%s" "$1" | bash "$2" >/dev/null 2>&1
+  sed -n "4p" "$HOME/.headsup/sessions/s1.state"
+  printf " %s" "$$"
+' claude '{"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"s1","cwd":"/tmp/proj","tool_input":{"command":"ls"}}' "$hook")
+check "the claude ancestor's pid is the owner" "${owner#* }" "${owner%% *}"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 printf 'scratch HOME left at %s\n' "$home"

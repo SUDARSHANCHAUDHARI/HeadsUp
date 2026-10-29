@@ -31,6 +31,9 @@ enum Sessions {
         /// nothing is running, and empty for the two-line files an older hook
         /// wrote before v0.6.
         let detail: String
+        /// The pid of the session's Claude Code process. Nil for the files an
+        /// older hook wrote, which is why the age fallback below stays.
+        let owner: pid_t?
         let modified: Date
         let url: URL
     }
@@ -72,16 +75,37 @@ enum Sessions {
         if state.isEmpty { return nil }
         let name = lines.count > 1 ? String(lines[1]).trimmingCharacters(in: .whitespaces) : ""
         let detail = lines.count > 2 ? String(lines[2]).trimmingCharacters(in: .whitespaces) : ""
+        let owner = lines.count > 3
+            ? pid_t(String(lines[3]).trimmingCharacters(in: .whitespaces)).flatMap { $0 > 0 ? $0 : nil }
+            : nil
         // Happy is a flash at the end of a turn, not a resting state.
         if state == "happy", Date().timeIntervalSince(modified) > happyHold { state = "idle" }
-        return Reading(id: id, state: state, name: name, detail: detail, modified: modified, url: url)
+        return Reading(id: id, state: state, name: name, detail: detail, owner: owner, modified: modified, url: url)
+    }
+
+    /// Whether a pid still belongs to a running process. EPERM means it is
+    /// alive but owned by someone else, which is still alive.
+    static func isRunning(_ pid: pid_t) -> Bool {
+        kill(pid, 0) == 0 || errno == EPERM
     }
 
     /// True once a finished session has had its moment and its head should go.
-    static func isOver(_ reading: Reading) -> Bool {
+    ///
+    /// `isRunning` is a seam for the tests; the app always uses the real one.
+    static func isOver(_ reading: Reading, isRunning: (pid_t) -> Bool = Sessions.isRunning) -> Bool {
         guard reading.id != legacyID else { return false } // the old single head never leaves
         let age = Date().timeIntervalSince(reading.modified)
-        return (reading.state == "sleeping" && age > farewell) || age > abandoned
+        // A file dated in the future never ages out, so it would otherwise
+        // leave a head on screen for ever. Checked before anything else,
+        // including the goodbye, which also compares against the age.
+        if age < 0 { return true }
+        // A goodbye is shown for its moment first, even though the process is
+        // usually already gone by the time SessionEnd's file lands.
+        if reading.state == "sleeping" { return age > farewell }
+        // The session's process is gone: closing a terminal fires no
+        // SessionEnd, so there is nothing to wait an hour for.
+        if let owner = reading.owner { return !isRunning(owner) }
+        return age > abandoned
     }
 
     /// Tidy up after a head we closed, so the next scan does not find it again.

@@ -56,8 +56,30 @@ case "$event" in
   *) exit 0 ;;
 esac
 
+# Line four: the pid of the Claude Code process this session belongs to, so the
+# app can drop a head the moment its session is gone. Closing a terminal fires
+# no SessionEnd, and the event carries no pid, so walk up from this hook's own
+# parent until a claude process turns up — normally the first step. Empty when
+# the walk finds nothing, which leaves the app on its age-based fallback.
+owner=""
+up="$PPID"
+for _ in 1 2 3 4 5; do
+  case "$up" in ""|0|1) break ;; esac
+  line=$(ps -o ppid=,comm= -p "$up" 2>/dev/null) || break
+  [ -n "$line" ] || break
+  # Word splitting, not ${line%% *}: ps pads the pid column to its width, so
+  # the first field can arrive with leading spaces.
+  # shellcheck disable=SC2086
+  set -- $line
+  [ "$#" -ge 2 ] || break
+  case "$2" in
+    */claude|claude|*/claude.exe|claude.exe) owner="$up"; break ;;
+  esac
+  up="$1"
+done
+
 # Write then rename so the app never reads a half-written file.
 out="$dir/sessions/$session.state"
 tmp="$dir/sessions/.$session.$$"
-printf '%s\n%s\n%s\n' "$state" "$name" "$detail" > "$tmp" 2>/dev/null && mv -f "$tmp" "$out" 2>/dev/null
+printf '%s\n%s\n%s\n%s\n' "$state" "$name" "$detail" "$owner" > "$tmp" 2>/dev/null && mv -f "$tmp" "$out" 2>/dev/null
 exit 0
