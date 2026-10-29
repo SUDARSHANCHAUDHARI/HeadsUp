@@ -37,6 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var slots: [String: Int] = [:]
     var hidden = false
     var timer: Timer?
+    /// Rewrites ~/.headsup/alive. The ask hook refuses to wait on a stale
+    /// heartbeat, which is what makes a crashed app harmless to a session.
+    var heartbeatTimer: Timer?
     var status: NSStatusItem!
     let visibilityItem = NSMenuItem(title: "Hide Head", action: #selector(toggleHead), keyEquivalent: "")
     let sessionsItem = NSMenuItem(title: "No sessions", action: nil, keyEquivalent: "")
@@ -51,14 +54,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         buildStatusItem()
+        // Before the first poll: the hook checks this file to decide whether
+        // anything is listening, and a request written before we say we are
+        // here would be waited on by nobody.
+        Ask.heartbeat()
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: Ask.heartbeatEvery, repeats: true) { _ in
+            Ask.heartbeat()
+        }
         poll()
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.poll() }
+    }
+
+    func applicationWillTerminate(_ note: Notification) {
+        // Say we have gone, then hand back anything still pending: a hook left
+        // waiting on a closed app would sit there for its full 60 seconds,
+        // when Claude Code could be asking in the terminal instead.
+        Ask.stopHeartbeat()
+        for request in Ask.read() { Ask.withdraw(request) }
     }
 
     // One pass over the session files: open heads for new sessions, update the
     // ones already on screen, and retire the sessions that have finished.
     func poll() {
         let readings = Sessions.read(happyHold: happyHold)
+        // Oldest first, so the head shows the request that has been waiting
+        // longest. Tools run in parallel, so one session can have several.
+        var pending: [String: Ask.Request] = [:]
+        for request in Ask.read() where pending[request.session] == nil {
+            pending[request.session] = request
+        }
         var live: Set<String> = []
 
         for reading in readings {
@@ -69,16 +93,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             live.insert(reading.id)
             if let head = heads[reading.id] {
                 head.name = reading.name
+                head.request = pending[reading.id]
                 head.setState(reading.state)
             } else {
-                open(reading)
+                open(reading, request: pending[reading.id])
             }
         }
 
         for id in order where !live.contains(id) { close(id) }
     }
 
-    func open(_ reading: Sessions.Reading) {
+    /// Answer the permission the head is showing, then take the buttons away.
+    /// The hook deletes its own files, so nothing is cleaned up here.
+    func decide(_ request: Ask.Request, allow: Bool) {
+        Ask.answer(request, Ask.verdict(for: request, allow: allow))
+        heads[request.session]?.request = nil
+    }
+
+    func open(_ reading: Sessions.Reading, request: Ask.Request? = nil) {
         // The first head keeps the remembered position; the rest fan out to its
         // left, into the lowest free slot.
         let first = order.isEmpty
@@ -91,13 +123,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let head = Head(session: reading.id, look: look, origin: origin, autosave: first ? "HeadsUp" : nil)
         if hidden { head.hide() }
+        head.onDecision = { [weak self] request, allow in self?.decide(request, allow: allow) }
         head.name = reading.name
+        head.request = request
         head.setState(reading.state)
         heads[reading.id] = head
         order.append(reading.id)
     }
 
     func close(_ id: String) {
+        // A head going away while Claude still waits: hand the question back
+        // rather than leave the hook waiting on a window that has gone.
+        if let request = heads[id]?.request { Ask.withdraw(request) }
         heads.removeValue(forKey: id)?.close()
         order.removeAll { $0 == id }
         slots.removeValue(forKey: id)
@@ -171,8 +208,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sessionsMenu.removeAllItems()
         for id in order {
             guard let head = heads[id] else { continue }
-            let row = NSMenuItem(title: head.name.isEmpty ? head.state : "\(head.name) — \(head.state)",
-                                 action: nil, keyEquivalent: "")
+            var title = head.name.isEmpty ? head.state : "\(head.name) — \(head.state)"
+            if let request = head.request {
+                title += " — waiting: \(request.summary)"
+            }
+            let row = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             row.isEnabled = false
             sessionsMenu.addItem(row)
         }

@@ -24,7 +24,8 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(REPO, "scripts", "install-hooks.sh")
 STATE_COMMAND = f"bash {os.path.join(REPO, 'hooks', 'headsup-state.sh')}"
-OURS = {STATE_COMMAND}
+ASK_COMMAND = f"bash {os.path.join(REPO, 'hooks', 'headsup-ask.sh')}"
+OURS = {STATE_COMMAND, ASK_COMMAND}
 
 passed = 0
 failed = 0
@@ -173,7 +174,17 @@ def main():
     else:
         ok("no event disappears")
 
-    # And the hook it was asked to add.
+    # And the hooks it was asked to add.
+    entries = [
+        e
+        for group in after["hooks"].get("PermissionRequest", [])
+        for e in group.get("hooks", [])
+        if e.get("command") == ASK_COMMAND
+    ]
+    check("the ask hook is registered once", 1, len(entries))
+    if entries:
+        check("the ask hook clears its own 60s wait", 70, entries[0].get("timeout"))
+
     state_events = {
         event
         for event, groups in after["hooks"].items()

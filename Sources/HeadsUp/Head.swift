@@ -4,21 +4,36 @@ import WebKit
 // One robot head: a transparent panel, the page that draws it, and the state
 // it is currently showing. One of these exists per live Claude Code session.
 //
-// The head owns nothing about where state comes from; the delegate polls the
-// files and hands each head its word.
+// Under the head sit two more rows, each appearing only when it has something
+// to say: the session's folder, and — when Claude is waiting on a permission —
+// Allow and Deny.
+//
+// The head owns nothing about where any of that comes from; the delegate polls
+// the files and hands each head its values.
 final class Head: NSObject, WKNavigationDelegate {
     /// Room under the head for the session's name.
     static let labelHeight: CGFloat = 18
+    /// Room for the Allow/Deny row.
+    static let buttonHeight: CGFloat = 26
+    /// A head is narrower than two readable buttons, so a pending request
+    /// widens the window to at least this.
+    static let buttonRowWidth: CGFloat = 150
 
     let session: String
     let panel: NSPanel
     let web: HeadView
     let label = NSTextField(labelWithString: "")
+    let allowButton = NSButton(title: "Allow", target: nil, action: nil)
+    let denyButton = NSButton(title: "Deny", target: nil, action: nil)
     private var shown = ""
     private var loaded = false
     private var look: Look
     /// Set once the page is up, so a state that arrived during loading is not lost.
     private var pending: String?
+
+    /// Called when Allow or Deny is pressed. The head does not know what a
+    /// decision means; it only reports which button was hit.
+    var onDecision: ((Ask.Request, Bool) -> Void)?
 
     init(session: String, look: Look, origin: NSPoint, autosave: String?) {
         self.session = session
@@ -49,22 +64,27 @@ final class Head: NSObject, WKNavigationDelegate {
 
         // The name sits on the desktop with nothing behind it, so it carries its
         // own shadow rather than relying on the wallpaper being dark.
-        label.font = .systemFont(ofSize: 11, weight: .semibold)
-        label.textColor = .white
-        label.alignment = .center
-        label.lineBreakMode = .byTruncatingTail
-        label.shadow = {
-            let shadow = NSShadow()
-            shadow.shadowColor = NSColor.black.withAlphaComponent(0.85)
-            shadow.shadowBlurRadius = 3
-            shadow.shadowOffset = NSSize(width: 0, height: -1)
-            return shadow
-        }()
-        label.frame = NSRect(x: 0, y: 0, width: panel.frame.width, height: Head.labelHeight)
+        style(label, size: 11, weight: .semibold, alpha: 1)
+
+        for button in [allowButton, denyButton] {
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.font = .systemFont(ofSize: 11, weight: .medium)
+            button.target = self
+            button.isHidden = true
+        }
+        allowButton.action = #selector(allowPressed)
+        denyButton.action = #selector(denyPressed)
+        // No key equivalent on Allow: a Return pressed anywhere would approve
+        // whatever is pending, and a permission is not something to grant by
+        // accident.
+        allowButton.keyEquivalent = ""
 
         let content = NSView(frame: NSRect(origin: .zero, size: panel.frame.size))
         content.addSubview(web)
         content.addSubview(label)
+        content.addSubview(allowButton)
+        content.addSubview(denyButton)
         panel.contentView = content
 
         guard let dir = Bundle.module.url(forResource: "web", withExtension: nil) else {
@@ -74,10 +94,25 @@ final class Head: NSObject, WKNavigationDelegate {
         panel.orderFrontRegardless()
     }
 
+    private func style(_ field: NSTextField, size: CGFloat, weight: NSFont.Weight, alpha: CGFloat) {
+        field.font = .systemFont(ofSize: size, weight: weight)
+        field.textColor = NSColor.white.withAlphaComponent(alpha)
+        field.alignment = .center
+        field.lineBreakMode = .byTruncatingTail
+        field.shadow = {
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.85)
+            shadow.shadowBlurRadius = 3
+            shadow.shadowOffset = NSSize(width: 0, height: -1)
+            return shadow
+        }()
+    }
+
     func close() {
         panel.orderOut(nil)
         panel.contentView = nil
         web.navigationDelegate = nil
+        onDecision = nil
     }
 
     /// The folder this session is working in. Empty hides the label and the
@@ -89,6 +124,37 @@ final class Head: NSObject, WKNavigationDelegate {
             label.toolTip = name.isEmpty ? nil : name
             layout()
         }
+    }
+
+    /// The permission Claude is waiting on, if any. Setting it puts the two
+    /// buttons under the head; clearing it takes them away again.
+    var request: Ask.Request? {
+        didSet {
+            guard request?.id != oldValue?.id || request?.detail != oldValue?.detail else { return }
+            if let request {
+                allowButton.title = request.allowTitle
+                denyButton.title = request.denyTitle
+                // Read aloud, "Allow" on its own says nothing about what is
+                // being allowed, so the whole request goes in the label.
+                allowButton.setAccessibilityLabel("\(request.allowTitle): \(request.summary)")
+                denyButton.setAccessibilityLabel("\(request.denyTitle): \(request.summary)")
+                allowButton.toolTip = request.summary
+                denyButton.toolTip = request.summary
+            }
+            allowButton.isHidden = request == nil
+            denyButton.isHidden = request == nil
+            layout()
+        }
+    }
+
+    @objc private func allowPressed() {
+        guard let request else { return }
+        onDecision?(request, true)
+    }
+
+    @objc private func denyPressed() {
+        guard let request else { return }
+        onDecision?(request, false)
     }
 
     func show() { panel.orderFrontRegardless() }
@@ -139,18 +205,37 @@ final class Head: NSObject, WKNavigationDelegate {
         layout()
     }
 
-    /// The window is the head plus, when there is one, a line of text under it.
+    /// The window is the head plus whichever of the rows under it have
+    /// something to show. Each row costs nothing when it is empty.
     private func layout() {
-        let room = name.isEmpty ? 0 : Head.labelHeight
-        let size = NSSize(width: headBounds.width, height: headBounds.height + room)
+        let nameRoom = name.isEmpty ? 0 : Head.labelHeight
+        let buttonRoom = request == nil ? 0 : Head.buttonHeight
+        let width = max(headBounds.width, request == nil ? 0 : Head.buttonRowWidth)
+        let size = NSSize(width: width, height: headBounds.height + nameRoom + buttonRoom)
+
         var next = panel.frame
-        // Keep the top edge still, so a head does not jump when its name arrives.
+        // Keep the top edge still, so a head does not jump when a row arrives.
         next.origin.y = next.maxY - size.height
         next.size = size
         if panel.frame != next { panel.setFrame(next, display: true) }
         panel.contentView?.frame = NSRect(origin: .zero, size: size)
-        web.frame = NSRect(x: 0, y: room, width: size.width, height: headBounds.height)
-        label.frame = NSRect(x: 0, y: 0, width: size.width, height: Head.labelHeight)
+
+        // Laid out from the bottom up: buttons, name, then the head.
+        var y: CGFloat = 0
+        if buttonRoom > 0 {
+            let gap: CGFloat = 6
+            let buttonWidth = (width - gap) / 2
+            denyButton.frame = NSRect(x: 0, y: y + 2, width: buttonWidth, height: Head.buttonHeight - 4)
+            allowButton.frame = NSRect(x: buttonWidth + gap, y: y + 2, width: buttonWidth, height: Head.buttonHeight - 4)
+            y += buttonRoom
+        }
+        if nameRoom > 0 {
+            label.frame = NSRect(x: 2, y: y, width: width - 4, height: Head.labelHeight)
+            y += nameRoom
+        }
+        web.frame = NSRect(x: (width - headBounds.width) / 2, y: y,
+                           width: headBounds.width, height: headBounds.height)
+
         label.isHidden = name.isEmpty
     }
 

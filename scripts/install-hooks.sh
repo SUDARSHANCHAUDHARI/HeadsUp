@@ -1,19 +1,27 @@
 #!/usr/bin/env bash
-# Add (or remove) the HeadsUp hook in ~/.claude/settings.json, so the head
+# Add (or remove) the HeadsUp hooks in ~/.claude/settings.json, so the head
 # follows a live Claude Code session without anyone hand-editing JSON.
 #
-#   ./scripts/install-hooks.sh              # add the hook
-#   ./scripts/install-hooks.sh --status     # which events have it
-#   ./scripts/install-hooks.sh --uninstall  # take it out again
+#   ./scripts/install-hooks.sh              # add the hooks
+#   ./scripts/install-hooks.sh --status     # which events have them
+#   ./scripts/install-hooks.sh --uninstall  # take them out again
 #
-# The file is only rewritten when something changed, and the previous copy is
-# kept next to it with a timestamp, so a later run cannot overwrite it. Open Claude Code sessions keep their old hooks; new ones
-# pick this up.
+# Two hooks go in. headsup-state.sh is fire-and-forget and reports what the
+# session is doing. headsup-ask.sh blocks on PermissionRequest so Allow and
+# Deny can be answered from the head; it fails open, so a closed HeadsUp
+# leaves permission prompts exactly as they were.
+#
+# Only this script's own entries are ever added or removed. Every other hook in
+# the file, and the statusLine, are left untouched — the file is read, two
+# groups are changed, and it is written back. The previous copy is kept with a
+# timestamp, so a second run cannot overwrite the good backup.
+# Open Claude Code sessions keep their old hooks; new ones pick these up.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 repo=$(pwd -P)
-hook="$repo/hooks/headsup-state.sh"
+state_hook="$repo/hooks/headsup-state.sh"
+ask_hook="$repo/hooks/headsup-ask.sh"
 settings="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
 mode=install
 
@@ -21,24 +29,40 @@ case "${1:-}" in
   "") ;;
   --status) mode=status ;;
   --uninstall) mode=uninstall ;;
-  -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "unknown argument: $1 (try --help)" >&2; exit 2 ;;
 esac
 
-[ -f "$hook" ] || { echo "hook script missing: $hook" >&2; exit 1; }
+for script in "$state_hook" "$ask_hook"; do
+  [ -f "$script" ] || { echo "hook script missing: $script" >&2; exit 1; }
+done
 command -v python3 >/dev/null || { echo "python3 not found; it ships with macOS" >&2; exit 1; }
 
-HEADSUP_HOOK="$hook" HEADSUP_SETTINGS="$settings" HEADSUP_MODE="$mode" python3 -I - <<'PY'
+HEADSUP_STATE_HOOK="$state_hook" HEADSUP_ASK_HOOK="$ask_hook" \
+HEADSUP_SETTINGS="$settings" HEADSUP_MODE="$mode" python3 -I - <<'PY'
 import json, os, shutil, sys, time
 
-hook = os.environ["HEADSUP_HOOK"]
 path = os.environ["HEADSUP_SETTINGS"]
 mode = os.environ["HEADSUP_MODE"]
-command = f"bash {hook}"
-events = [
+
+state_command = f'bash {os.environ["HEADSUP_STATE_HOOK"]}'
+ask_command = f'bash {os.environ["HEADSUP_ASK_HOOK"]}'
+
+# The status hook: cheap, never blocks, wanted on everything that changes what
+# the head should show.
+STATE_EVENTS = [
     "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification",
     "PermissionRequest", "Stop", "StopFailure", "SessionEnd",
 ]
+# The blocking hook: one event only. Its timeout must clear the hook's own
+# 60s wait, or Claude Code would kill it mid-wait and the click would be lost.
+ASK_EVENT = "PermissionRequest"
+ASK_TIMEOUT = 70
+
+# (event, the entry to add) for everything this script owns.
+WANTED = [(event, {"type": "command", "command": state_command}) for event in STATE_EVENTS]
+WANTED.append((ASK_EVENT, {"type": "command", "command": ask_command, "timeout": ASK_TIMEOUT}))
+OURS = {state_command, ask_command}
 
 if os.path.exists(path):
     try:
@@ -70,7 +94,7 @@ def groups(event):
     return hooks.setdefault(event, []) if mode == "install" else []
 
 
-def has_ours(group):
+def group_has(group, command):
     if not isinstance(group, dict):
         return False
     entries = group.get("hooks")
@@ -79,43 +103,52 @@ def has_ours(group):
     )
 
 
-present = [e for e in events if any(has_ours(g) for g in (hooks.get(e) or []))]
+def is_ours(group):
+    return any(group_has(group, command) for command in OURS)
+
+
+def installed(event, command):
+    return any(group_has(g, command) for g in (hooks.get(event) or []))
+
 
 if mode == "status":
     print(f"settings: {path}")
-    print(f"command:  {command}")
-    for event in events:
-        print(f"  {'yes' if event in present else 'no ':3}  {event}")
+    print(f"status:   {state_command}")
+    print(f"ask:      {ask_command}")
+    for event, entry in WANTED:
+        which = "ask" if entry["command"] == ask_command else "status"
+        mark = "yes" if installed(event, entry["command"]) else "no "
+        print(f"  {mark}  {event} ({which})")
     sys.exit(0)
 
 changed = []
 if mode == "install":
-    for event in events:
-        if event in present:
+    for event, entry in WANTED:
+        if installed(event, entry["command"]):
             continue
-        groups(event).append(
-            {"matcher": "*", "hooks": [{"type": "command", "command": command}]}
-        )
-        changed.append(event)
+        groups(event).append({"matcher": "*", "hooks": [dict(entry)]})
+        which = "ask" if entry["command"] == ask_command else "status"
+        changed.append(f"{event} ({which})")
 else:
-    for event in events:
+    for event in dict.fromkeys(e for e, _ in WANTED):
         existing = hooks.get(event)
         if not isinstance(existing, list):
             continue
-        kept = [g for g in existing if not has_ours(g)]
+        kept = [g for g in existing if not is_ours(g)]
         if len(kept) != len(existing):
             changed.append(event)
         # Leave an emptied event behind rather than reshaping a file we do not own.
         hooks[event] = kept
 
 if not changed:
-    print("nothing to change" if mode == "install" else "hook was not installed")
+    print("nothing to change" if mode == "install" else "hooks were not installed")
     sys.exit(0)
 
 if os.path.exists(path):
-    # Timestamped, and with a counter: a single fixed name meant an install
-    # followed by an uninstall overwrote the one backup still holding the
-    # user's original file, and the two runs can land in the same second.
+    # Timestamped: an install followed by an uninstall must not overwrite the
+    # one backup that still holds the original file. The counter matters too —
+    # the two runs can land in the same second, which is how this went wrong
+    # the first time.
     stamp = time.strftime("%Y%m%d-%H%M%S")
     backup = f"{path}.headsup-{stamp}.bak"
     nth = 2
