@@ -7,8 +7,8 @@
 #   ./scripts/install-hooks.sh --uninstall  # take it out again
 #
 # The file is only rewritten when something changed, and the previous copy is
-# kept next to it. Open Claude Code sessions keep their old hooks; new ones
-# pick this up.
+# kept next to it with a timestamp, so a later run cannot overwrite it.
+# Open Claude Code sessions keep their old hooks; new ones pick this up.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -29,7 +29,7 @@ esac
 command -v python3 >/dev/null || { echo "python3 not found; it ships with macOS" >&2; exit 1; }
 
 HEADSUP_HOOK="$hook" HEADSUP_SETTINGS="$settings" HEADSUP_MODE="$mode" python3 -I - <<'PY'
-import json, os, shutil, sys
+import json, os, shutil, sys, time
 
 hook = os.environ["HEADSUP_HOOK"]
 path = os.environ["HEADSUP_SETTINGS"]
@@ -113,8 +113,17 @@ if not changed:
     sys.exit(0)
 
 if os.path.exists(path):
-    shutil.copy2(path, path + ".headsup.bak")
-    print(f"backed up {path} -> {path}.headsup.bak")
+    # Timestamped, and with a counter: a single fixed name meant an install
+    # followed by an uninstall overwrote the one backup still holding the
+    # user's original file, and the two runs can land in the same second.
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = f"{path}.headsup-{stamp}.bak"
+    nth = 2
+    while os.path.exists(backup):
+        backup = f"{path}.headsup-{stamp}-{nth}.bak"
+        nth += 1
+    shutil.copy2(path, backup)
+    print(f"backed up {path} -> {backup}")
 os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 tmp = path + ".headsup.tmp"
 with open(tmp, "w", encoding="utf-8") as f:
