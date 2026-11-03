@@ -37,6 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var slots: [String: Int] = [:]
     var hidden = false
     var timer: Timer?
+    /// The state each session was last seen in, so the chime fires on the
+    /// change into `happy` rather than on every poll while it sits there.
+    var lastState: [String: String] = [:]
     /// Rewrites ~/.headsup/alive. The ask hook refuses to wait on a stale
     /// heartbeat, which is what makes a crashed app harmless to a session.
     var heartbeatTimer: Timer?
@@ -48,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let loginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleLogin), keyEquivalent: "")
     let pauseItem = NSMenuItem(title: "Pause Animation", action: #selector(togglePause), keyEquivalent: "")
     let antennaItem = NSMenuItem(title: "Antenna", action: #selector(toggleAntenna), keyEquivalent: "")
+    let chimeItem = NSMenuItem(title: "Chime When Done", action: #selector(toggleChime), keyEquivalent: "")
     var look = Look.load()
     var lookMenus: [LookField: NSMenu] = [:]
     let about = AboutWindow()
@@ -99,9 +103,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             } else {
                 open(reading, request: pending[reading.id])
             }
+            chimeIfFinished(reading)
         }
 
         for id in order where !live.contains(id) { close(id) }
+    }
+
+    /// A sound on the change into `happy`, which is how a finished turn
+    /// arrives. Only on the change: the state sits there for happyHold
+    /// seconds afterwards.
+    func chimeIfFinished(_ reading: Sessions.Reading) {
+        let previous = lastState[reading.id]
+        lastState[reading.id] = reading.state
+        guard look.chime, reading.state == "happy", previous != nil, previous != "happy" else { return }
+        // A system sound, so there is no audio file to ship or to miss.
+        NSSound(named: "Glass")?.play()
     }
 
     /// Answer the permission the head is showing, then take the buttons away.
@@ -140,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         heads.removeValue(forKey: id)?.close()
         order.removeAll { $0 == id }
         slots.removeValue(forKey: id)
+        lastState.removeValue(forKey: id)
     }
 
     // The head has no Dock icon, so the menu bar is where everything else lives.
@@ -171,6 +188,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(antennaItem)
         pauseItem.target = self
         menu.addItem(pauseItem)
+        chimeItem.target = self
+        menu.addItem(chimeItem)
         menu.addItem(.separator())
         let aboutItem = NSMenuItem(title: "About HeadsUp…", action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
@@ -225,6 +244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.state = LoginItem.isInstalled ? .on : .off
         antennaItem.state = look.antenna ? .on : .off
         pauseItem.state = look.paused ? .on : .off
+        chimeItem.state = look.chime ? .on : .off
         mark(.shape, look.shape)
         mark(.shell, look.shell)
         mark(.trim, look.trim)
@@ -278,6 +298,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         look.antenna.toggle()
         look.save()
         pushLook()
+    }
+
+    // The sound is ours, not the page's, so there is nothing to push.
+    @objc func toggleChime() {
+        look.chime.toggle()
+        look.save()
     }
 
     func pushLook() {

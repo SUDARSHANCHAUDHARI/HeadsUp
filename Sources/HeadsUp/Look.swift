@@ -21,6 +21,10 @@ struct Look: Equatable {
     var speed = 1.0
     var paused = false
     var antenna = true
+    /// A sound when a turn ends. Not part of the look the page draws, so it
+    /// stays out of `json`; it lives here because this is already where a
+    /// menu-bar choice is remembered.
+    var chime = true
 
     private static let key = "look"
 
@@ -39,13 +43,14 @@ struct Look: Equatable {
         if let value = saved["speed"] as? Double, speeds.contains(value) { look.speed = value }
         if let value = saved["paused"] as? Bool { look.paused = value }
         if let value = saved["antenna"] as? Bool { look.antenna = value }
+        if let value = saved["chime"] as? Bool { look.chime = value }
         return look
     }
 
     func save(to defaults: UserDefaults = .standard) {
         defaults.set([
             "shape": shape, "shell": shell, "trim": trim, "screen": screen,
-            "speed": speed, "paused": paused, "antenna": antenna,
+            "speed": speed, "paused": paused, "antenna": antenna, "chime": chime,
         ], forKey: Self.key)
     }
 
