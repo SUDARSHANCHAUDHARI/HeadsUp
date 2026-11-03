@@ -93,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             live.insert(reading.id)
             if let head = heads[reading.id] {
                 head.name = reading.name
+                head.detail = reading.detail
                 head.request = pending[reading.id]
                 head.setState(reading.state)
             } else {
@@ -125,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if hidden { head.hide() }
         head.onDecision = { [weak self] request, allow in self?.decide(request, allow: allow) }
         head.name = reading.name
+        head.detail = reading.detail
         head.request = request
         head.setState(reading.state)
         heads[reading.id] = head
@@ -211,6 +213,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             var title = head.name.isEmpty ? head.state : "\(head.name) — \(head.state)"
             if let request = head.request {
                 title += " — waiting: \(request.summary)"
+            } else if !head.detail.isEmpty {
+                title += " — \(head.detail)"
             }
             let row = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             row.isEnabled = false

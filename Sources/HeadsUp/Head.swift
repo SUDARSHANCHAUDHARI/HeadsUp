@@ -4,15 +4,17 @@ import WebKit
 // One robot head: a transparent panel, the page that draws it, and the state
 // it is currently showing. One of these exists per live Claude Code session.
 //
-// Under the head sit two more rows, each appearing only when it has something
-// to say: the session's folder, and — when Claude is waiting on a permission —
-// Allow and Deny.
+// Under the head sit up to three more rows, each appearing only when it has
+// something to say: the session's folder, what the current tool is doing, and
+// — when Claude is waiting on a permission — Allow and Deny.
 //
 // The head owns nothing about where any of that comes from; the delegate polls
 // the files and hands each head its values.
 final class Head: NSObject, WKNavigationDelegate {
     /// Room under the head for the session's name.
     static let labelHeight: CGFloat = 18
+    /// Room for the line saying what the tool is doing.
+    static let detailHeight: CGFloat = 15
     /// Room for the Allow/Deny row.
     static let buttonHeight: CGFloat = 26
     /// A head is narrower than two readable buttons, so a pending request
@@ -23,6 +25,7 @@ final class Head: NSObject, WKNavigationDelegate {
     let panel: NSPanel
     let web: HeadView
     let label = NSTextField(labelWithString: "")
+    let detailLabel = NSTextField(labelWithString: "")
     let allowButton = NSButton(title: "Allow", target: nil, action: nil)
     let denyButton = NSButton(title: "Deny", target: nil, action: nil)
     private var shown = ""
@@ -65,6 +68,11 @@ final class Head: NSObject, WKNavigationDelegate {
         // The name sits on the desktop with nothing behind it, so it carries its
         // own shadow rather than relying on the wallpaper being dark.
         style(label, size: 11, weight: .semibold, alpha: 1)
+        // The detail is the quieter of the two, and the one that can be long,
+        // so it truncates in the middle: the end of a path matters as much as
+        // its start.
+        style(detailLabel, size: 10, weight: .regular, alpha: 0.82)
+        detailLabel.lineBreakMode = .byTruncatingMiddle
 
         for button in [allowButton, denyButton] {
             button.bezelStyle = .rounded
@@ -83,6 +91,7 @@ final class Head: NSObject, WKNavigationDelegate {
         let content = NSView(frame: NSRect(origin: .zero, size: panel.frame.size))
         content.addSubview(web)
         content.addSubview(label)
+        content.addSubview(detailLabel)
         content.addSubview(allowButton)
         content.addSubview(denyButton)
         panel.contentView = content
@@ -122,6 +131,16 @@ final class Head: NSObject, WKNavigationDelegate {
             guard name != oldValue else { return }
             label.stringValue = name
             label.toolTip = name.isEmpty ? nil : name
+            layout()
+        }
+    }
+
+    /// What the current tool is doing. Same deal: empty costs no room.
+    var detail: String = "" {
+        didSet {
+            guard detail != oldValue else { return }
+            detailLabel.stringValue = detail
+            detailLabel.toolTip = detail.isEmpty ? nil : detail
             layout()
         }
     }
@@ -205,13 +224,14 @@ final class Head: NSObject, WKNavigationDelegate {
         layout()
     }
 
-    /// The window is the head plus whichever of the rows under it have
+    /// The window is the head plus whichever of the three rows under it have
     /// something to show. Each row costs nothing when it is empty.
     private func layout() {
         let nameRoom = name.isEmpty ? 0 : Head.labelHeight
+        let detailRoom = detail.isEmpty ? 0 : Head.detailHeight
         let buttonRoom = request == nil ? 0 : Head.buttonHeight
         let width = max(headBounds.width, request == nil ? 0 : Head.buttonRowWidth)
-        let size = NSSize(width: width, height: headBounds.height + nameRoom + buttonRoom)
+        let size = NSSize(width: width, height: headBounds.height + nameRoom + detailRoom + buttonRoom)
 
         var next = panel.frame
         // Keep the top edge still, so a head does not jump when a row arrives.
@@ -220,7 +240,7 @@ final class Head: NSObject, WKNavigationDelegate {
         if panel.frame != next { panel.setFrame(next, display: true) }
         panel.contentView?.frame = NSRect(origin: .zero, size: size)
 
-        // Laid out from the bottom up: buttons, name, then the head.
+        // Laid out from the bottom up: buttons, detail, name, then the head.
         var y: CGFloat = 0
         if buttonRoom > 0 {
             let gap: CGFloat = 6
@@ -228,6 +248,10 @@ final class Head: NSObject, WKNavigationDelegate {
             denyButton.frame = NSRect(x: 0, y: y + 2, width: buttonWidth, height: Head.buttonHeight - 4)
             allowButton.frame = NSRect(x: buttonWidth + gap, y: y + 2, width: buttonWidth, height: Head.buttonHeight - 4)
             y += buttonRoom
+        }
+        if detailRoom > 0 {
+            detailLabel.frame = NSRect(x: 2, y: y, width: width - 4, height: Head.detailHeight)
+            y += detailRoom
         }
         if nameRoom > 0 {
             label.frame = NSRect(x: 2, y: y, width: width - 4, height: Head.labelHeight)
@@ -237,6 +261,7 @@ final class Head: NSObject, WKNavigationDelegate {
                            width: headBounds.width, height: headBounds.height)
 
         label.isHidden = name.isEmpty
+        detailLabel.isHidden = detail.isEmpty
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

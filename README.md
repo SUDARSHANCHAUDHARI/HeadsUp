@@ -32,6 +32,7 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 - Right-click the head to quit; no Dock icon
 - **Allow or Deny a permission from the head itself** — one click, no window switching; the terminal dialog still works, and whichever is answered first wins
 - **Approve a plan or send it back** — plan mode arrives on the same channel, so the buttons read Approve and Send back, and sending it back asks Claude what should be different
+- A line under the head saying what the current tool is doing: the command, the file, the pattern
 - Two hook scripts: one maps events to states and never blocks Claude, the other waits for your click on a permission and **fails open** — no HeadsUp running, no change to how prompts behave
 - One command installs both into `~/.claude/settings.json`, and takes them out again. It only ever adds or removes its own two entries: every other hook, and your `statusLine`, are left exactly as they were, and the previous file is kept with a timestamp
 - Shows `happy` when a turn ends, then returns to `idle` after 5 seconds
@@ -235,11 +236,13 @@ No state file yet means no session has run, so the head sleeps. Unknown events l
 swift build                         # debug build of the app only (run ./build.sh once first)
 
 swift test                          # the app: Sessions, Ask, Look, and the hook end to end
+bash Tests/state-hook.test.sh       # the status hook, including the detail line
 bash Tests/ask-hook.test.sh         # the ask hook: failing open, deciding, falling back
 python3 Tests/install-hooks.test.py # the installer, against a copy of your real settings.json
 
 # feed the status hook a sample event
-printf '{"hook_event_name":"PreToolUse","tool_name":"Grep"}' | bash hooks/headsup-state.sh
+printf '{"hook_event_name":"PreToolUse","tool_name":"Grep","tool_input":{"pattern":"TODO"}}' \
+  | bash hooks/headsup-state.sh
 cat ~/.headsup/state                # searching
 ```
 
