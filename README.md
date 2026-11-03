@@ -33,6 +33,7 @@ The robot is the drawing engine from [robot-heads](https://github.com/fayazara/r
 - **Allow or Deny a permission from the head itself** — one click, no window switching; the terminal dialog still works, and whichever is answered first wins
 - **Approve a plan or send it back** — plan mode arrives on the same channel, so the buttons read Approve and Send back, and sending it back asks Claude what should be different
 - A line under the head saying what the current tool is doing: the command, the file, the pattern
+- A chime when a turn ends, switchable from the menu bar
 - Two hook scripts: one maps events to states and never blocks Claude, the other waits for your click on a permission and **fails open** — no HeadsUp running, no change to how prompts behave
 - One command installs both into `~/.claude/settings.json`, and takes them out again. It only ever adds or removes its own two entries: every other hook, and your `statusLine`, are left exactly as they were, and the previous file is kept with a timestamp
 - Shows `happy` when a turn ends, then returns to `idle` after 5 seconds
